@@ -218,7 +218,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset })
                     key={version.abbreviation}
                     label={`${version.name} (${version.abbreviation})`}
                     value={version.abbreviation}
-                    color="#1F2937"
+                    color="#000000"
                   />
                 ))}
               </Picker>
