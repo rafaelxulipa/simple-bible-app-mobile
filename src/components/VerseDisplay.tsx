@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   resetButton: {
-    backgroundColor: "rgba(239, 68, 68, 0.2)",
+    backgroundColor: "rgba(252, 11, 11, 0.2)",
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(239, 68, 68, 0.3)",
   },
   resetButtonText: {
-    color: "#FCA5A5",
+    color: "#ff0000",
     fontSize: 14,
     fontWeight: "500",
   },

@@ -31,7 +31,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
 }
 expoAutolinking.useExpoModules()
 
-rootProject.name = 'simple-bible-app-mobile'
+rootProject.name = 'Bíblia Sagrada'
 
 expoAutolinking.useExpoVersionCatalog()
 
