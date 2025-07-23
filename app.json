@@ -2,7 +2,7 @@
   "expo": {
     "name": "simple-bible-app-mobile",
     "slug": "simple-bible-app-mobile",
-    "version": "1.0.0",
+    "version": "5.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/icon.png",
     "userInterfaceStyle": "light",
