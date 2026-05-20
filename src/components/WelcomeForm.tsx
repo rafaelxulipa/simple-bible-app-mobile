@@ -1,5 +1,3 @@
-"use client"
-
 import React, { useState } from "react"
 import {
   View,
@@ -11,91 +9,89 @@ import {
   Platform,
   ScrollView,
   Alert,
-  Animated,
+  Image,
+  useColorScheme,
 } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialIcons } from "@expo/vector-icons"
+import { CelestialBackground } from "./CelestialBackground"
+import { AppFooter } from "./AppFooter"
 import type { UserData } from "../types"
 
 interface WelcomeFormProps {
   onSubmit: (data: UserData) => void
+  onPrivacyPress?: () => void
 }
 
-export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit }) => {
-  const [name, setName] = useState("")
+export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit, onPrivacyPress }) => {
+  const [name, setName]     = useState("")
   const [church, setChurch] = useState("")
-  const [cloudAnimation] = useState(new Animated.Value(0))
-
-  React.useEffect(() => {
-    // Animação das nuvens
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(cloudAnimation, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(cloudAnimation, {
-          toValue: 0,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start()
-  }, [])
+  const colorScheme         = useColorScheme()
+  const isDark              = colorScheme === "dark"
 
   const handleSubmit = () => {
     if (!name.trim() || !church.trim()) {
       Alert.alert("Campos obrigatórios", "Por favor, preencha todos os campos.")
       return
     }
-
     onSubmit({ name: name.trim(), church: church.trim() })
   }
 
-  const cloudTranslateX = cloudAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 20],
-  })
-
   return (
-    <LinearGradient colors={["#60A5FA", "#93C5FD", "#DBEAFE"]} style={styles.container}>
-      {/* Animated clouds effect */}
-      <View style={styles.cloudsContainer}>
-        <Animated.View style={[styles.cloud, styles.cloud1, { transform: [{ translateX: cloudTranslateX }] }]} />
-        <Animated.View
-          style={[styles.cloud, styles.cloud2, { transform: [{ translateX: Animated.multiply(cloudTranslateX, -1) }] }]}
-        />
-        <Animated.View style={[styles.cloud, styles.cloud3, { transform: [{ translateX: cloudTranslateX }] }]} />
-        <Animated.View
-          style={[
-            styles.cloud,
-            styles.cloud4,
-            { transform: [{ translateX: Animated.multiply(cloudTranslateX, -0.5) }] },
-          ]}
-        />
-      </View>
+    <View style={styles.container}>
+      <CelestialBackground />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardContainer}>
-        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.keyboardContainer}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {/* Card */}
           <View style={styles.card}>
-            <View style={styles.iconContainer}>
-              <LinearGradient colors={["#3B82F6", "#1D4ED8"]} style={styles.iconBackground}>
-                <MaterialIcons name="favorite" size={40} color="#FFFFFF" />
-              </LinearGradient>
+            {/* Barra superior */}
+            <LinearGradient
+              colors={["#FBBF24", "#FCD34D", "#FBBF24"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.topBar}
+            />
+
+            {/* Logo */}
+            <View style={styles.logoContainer}>
+              <Image
+                source={require("../assets/icon.png")}
+                style={styles.logo}
+                resizeMode="cover"
+              />
             </View>
 
+            {/* Título */}
             <Text style={styles.title}>Bem-vindo(a)!</Text>
-            <Text style={styles.description}>
-              Para começar a receber versículos bíblicos diários, precisamos conhecer você melhor.
-            </Text>
+            <Text style={styles.appName}>Bíblia Sagrada</Text>
 
+            {/* Citação */}
+            <View style={styles.quoteContainer}>
+              <Text style={styles.quoteText}>
+                "A tua palavra é lâmpada para os meus pés e luz para o meu caminho."
+              </Text>
+              <Text style={styles.quoteReference}>— Salmos 119:105</Text>
+            </View>
+
+            {/* Formulário */}
             <View style={styles.form}>
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Seu nome</Text>
+                <View style={styles.labelRow}>
+                  <MaterialIcons name="person" size={14} color="#0EA5E9" />
+                  <Text style={styles.label}>Seu nome</Text>
+                </View>
                 <TextInput
-                  style={styles.input}
-                  placeholder="Digite seu nome"
+                  style={[styles.input, isDark && styles.inputDark]}
+                  placeholder="Como você se chama?"
                   placeholderTextColor="#9CA3AF"
                   value={name}
                   onChangeText={setName}
@@ -105,12 +101,12 @@ export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit }) => {
               </View>
 
               <View style={styles.inputContainer}>
-                <View style={styles.labelContainer}>
-                  <MaterialIcons name="church" size={16} color="#374151" />
+                <View style={styles.labelRow}>
+                  <MaterialIcons name="church" size={14} color="#0EA5E9" />
                   <Text style={styles.label}>Sua igreja</Text>
                 </View>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, isDark && styles.inputDark]}
                   placeholder="Nome da sua igreja"
                   placeholderTextColor="#9CA3AF"
                   value={church}
@@ -127,57 +123,37 @@ export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit }) => {
                 disabled={!name.trim() || !church.trim()}
                 activeOpacity={0.8}
               >
-                <LinearGradient colors={["#3B82F6", "#1D4ED8"]} style={styles.buttonGradient}>
-                  <Text style={styles.buttonText}>Começar Jornada Espiritual</Text>
+                <LinearGradient
+                  colors={["#0EA5E9", "#2563EB"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.buttonGradient}
+                >
+                  <Text style={styles.buttonText}>✨ Começar Jornada Espiritual</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
+
+            {/* Barra inferior */}
+            <LinearGradient
+              colors={["#7DD3FC", "#60A5FA", "#7DD3FC"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.bottomBar}
+            />
           </View>
+
+          {/* Footer */}
+          <AppFooter onPrivacyPress={onPrivacyPress} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  cloudsContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  cloud: {
-    position: "absolute",
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 50,
-  },
-  cloud1: {
-    width: 120,
-    height: 60,
-    top: 40,
-    left: 40,
-  },
-  cloud2: {
-    width: 160,
-    height: 80,
-    top: 80,
-    right: 80,
-  },
-  cloud3: {
-    width: 100,
-    height: 50,
-    top: 120,
-    left: "30%",
-  },
-  cloud4: {
-    width: 140,
-    height: 70,
-    top: 160,
-    right: "30%",
   },
   keyboardContainer: {
     flex: 1,
@@ -186,98 +162,123 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     padding: 20,
+    gap: 16,
   },
   card: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderRadius: 20,
-    padding: 30,
+    backgroundColor: "rgba(255,255,255,0.93)",
+    borderRadius: 28,
+    overflow: "hidden",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowRadius: 24,
+    elevation: 12,
   },
-  iconContainer: {
-    marginBottom: 20,
+  topBar: {
+    width: "100%",
+    height: 6,
   },
-  iconBackground: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
+  logoContainer: {
+    marginTop: 28,
+    marginBottom: 16,
+    width: 88,
+    height: 88,
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.9)",
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
+  },
+  logo: {
+    width: "100%",
+    height: "100%",
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "bold",
     color: "#1F2937",
-    marginBottom: 10,
     textAlign: "center",
   },
-  description: {
-    fontSize: 16,
+  appName: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0EA5E9",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  quoteContainer: {
+    borderLeftWidth: 2,
+    borderLeftColor: "#FBBF24",
+    paddingLeft: 12,
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  quoteText: {
+    fontSize: 13,
     color: "#6B7280",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 30,
+    fontStyle: "italic",
+    lineHeight: 20,
+  },
+  quoteReference: {
+    fontSize: 12,
+    color: "#D97706",
+    fontWeight: "600",
+    marginTop: 4,
   },
   form: {
     width: "100%",
+    paddingHorizontal: 24,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 18,
   },
-  labelContainer: {
+  labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    gap: 5,
+    marginBottom: 6,
   },
   label: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     color: "#374151",
-    marginLeft: 4,
   },
   input: {
     height: 50,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
     paddingHorizontal: 16,
     fontSize: 16,
     color: "#1F2937",
   },
+  inputDark: {
+    backgroundColor: "#F9FAFB",
+  },
   button: {
-    marginTop: 10,
-    borderRadius: 12,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 14,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
     shadowRadius: 8,
     elevation: 8,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   buttonGradient: {
-    height: 50,
+    height: 52,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -285,5 +286,10 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  bottomBar: {
+    width: "100%",
+    height: 4,
+    marginTop: 16,
   },
 })

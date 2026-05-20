@@ -89,3 +89,67 @@ export function getSpecificVerse(
     version: versionAbbr,
   }
 }
+
+export function getDailyVerse(versionAbbr = "NVI"): BibleVerse | null {
+  const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
+  if (!version || version.books.length === 0) return null
+  const now = new Date()
+  const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+  const bookIndex = seed % version.books.length
+  const book = version.books[bookIndex]
+  const chapterIndex = (seed * 7) % book.chapters.length
+  const chapter = book.chapters[chapterIndex]
+  if (!chapter || chapter.length === 0) return null
+  const verseIndex = (seed * 13) % chapter.length
+  return {
+    book: book.book,
+    abbrev: book.abbrev,
+    chapter: chapterIndex + 1,
+    verse: verseIndex + 1,
+    text: chapter[verseIndex],
+    version: versionAbbr,
+  }
+}
+
+export function getChapterVerses(versionAbbr: string, bookAbbrev: string, chapter: number): BibleVerse[] {
+  const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
+  if (!version) return []
+  const book = version.books.find((b) => b.abbrev === bookAbbrev)
+  if (!book) return []
+  const chapterData = book.chapters[chapter - 1]
+  if (!chapterData) return []
+  return chapterData.map((text, i) => ({
+    book: book.book,
+    abbrev: book.abbrev,
+    chapter,
+    verse: i + 1,
+    text,
+    version: versionAbbr,
+  }))
+}
+
+export function searchVerses(versionAbbr: string, query: string): BibleVerse[] {
+  const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
+  if (!version || !query.trim()) return []
+  const q = query.toLowerCase()
+  const results: BibleVerse[] = []
+  for (const book of version.books) {
+    for (let ci = 0; ci < book.chapters.length; ci++) {
+      const chapter = book.chapters[ci]
+      for (let vi = 0; vi < chapter.length; vi++) {
+        if (chapter[vi].toLowerCase().includes(q)) {
+          results.push({
+            book: book.book,
+            abbrev: book.abbrev,
+            chapter: ci + 1,
+            verse: vi + 1,
+            text: chapter[vi],
+            version: versionAbbr,
+          })
+          if (results.length >= 50) return results
+        }
+      }
+    }
+  }
+  return results
+}

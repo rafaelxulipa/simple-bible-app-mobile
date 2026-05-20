@@ -1,81 +1,211 @@
-"use client"
-
-import React, { useState, useEffect } from "react"
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Animated } from "react-native"
+import React, { useState, useEffect, useRef } from "react"
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Animated,
+  TextInput,
+  Share,
+  Modal,
+  FlatList,
+  Platform,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialIcons } from "@expo/vector-icons"
 import { Picker } from "@react-native-picker/picker"
-import type { UserData, BibleVerse } from "../types"
-import { getRandomVerse, getAvailableVersions } from "../data/bible-verses"
+import { CelestialBackground } from "./CelestialBackground"
+import { AppFooter } from "./AppFooter"
+import type { UserData, BibleVerse, BibleBook } from "../types"
+import {
+  getRandomVerse,
+  getDailyVerse,
+  getAvailableVersions,
+  getBooksFromVersion,
+  getChapterVerses,
+  searchVerses,
+} from "../data/bible-verses"
 import { getCurrentTime, formatReference } from "../utils/dateUtils"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 interface VerseDisplayProps {
   userData: UserData
   onReset: () => void
+  onPrivacyPress?: () => void
+  onReaderPress?: (params?: { book?: string; chapter?: number; verse?: number; version?: string }) => void
 }
 
-export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset }) => {
-  const [currentVerse, setCurrentVerse] = useState<BibleVerse | null>(null)
+type Mode = "random" | "daily" | "navigate" | "search"
+
+interface FavoriteVerse extends BibleVerse {
+  savedAt: string
+}
+
+const FAVORITES_KEY = "simpleBible:favorites"
+
+async function loadFavorites(): Promise<FavoriteVerse[]> {
+  try {
+    const data = await AsyncStorage.getItem(FAVORITES_KEY)
+    return data ? (JSON.parse(data) as FavoriteVerse[]) : []
+  } catch {
+    return []
+  }
+}
+
+async function saveFavoritesToStorage(favorites: FavoriteVerse[]) {
+  await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites))
+}
+
+export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, onPrivacyPress, onReaderPress }) => {
+  const [mode, setMode]                       = useState<Mode>("random")
   const [selectedVersion, setSelectedVersion] = useState("NVI")
-  const [showUserInfo, setShowUserInfo] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [cloudAnimation] = useState(new Animated.Value(0))
-  const [fadeAnimation] = useState(new Animated.Value(0))
+  const [isLoading, setIsLoading]             = useState(false)
+  const [showUserInfo, setShowUserInfo]       = useState(false)
+  const [showFavorites, setShowFavorites]     = useState(false)
+
+  // Modo aleatório — histórico para prev/next
+  const [verseHistory, setVerseHistory]   = useState<BibleVerse[]>([])
+  const [historyIndex, setHistoryIndex]   = useState(-1)
+
+  // Modo diário
+  const [dailyVerse, setDailyVerse] = useState<BibleVerse | null>(null)
+
+  // Modo navegar
+  const [books, setBooks]               = useState<BibleBook[]>([])
+  const [selectedBook, setSelectedBook] = useState("")
+  const [selectedChapter, setSelectedChapter] = useState(1)
+  const [chapterVerses, setChapterVerses]     = useState<BibleVerse[]>([])
+
+  // Modo pesquisa
+  const [searchQuery, setSearchQuery]       = useState("")
+  const [searchResults, setSearchResults]   = useState<BibleVerse[]>([])
+  const [isSearching, setIsSearching]       = useState(false)
+  const [hasSearched, setHasSearched]       = useState(false)
+
+  const [favorites, setFavorites] = useState<FavoriteVerse[]>([])
+  const [readingProgress, setReadingProgress] = useState<{ bookAbbrev: string; bookName: string; chapter: number; verse?: number; version: string } | null>(null)
+  const [showReaderModal, setShowReaderModal] = useState(false)
+
+  const fadeAnimation = useRef(new Animated.Value(0)).current
   const availableVersions = getAvailableVersions()
+  const currentVerse = historyIndex >= 0 ? verseHistory[historyIndex] : null
 
-  React.useEffect(() => {
-    // Animação das nuvens
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(cloudAnimation, {
-          toValue: 1,
-          duration: 4000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(cloudAnimation, {
-          toValue: 0,
-          duration: 4000,
-          useNativeDriver: true,
-        }),
-      ]),
-    ).start()
-
-    // Animação de fade in
-    Animated.timing(fadeAnimation, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start()
+  useEffect(() => {
+    Animated.timing(fadeAnimation, { toValue: 1, duration: 1000, useNativeDriver: true }).start()
+    loadFavorites().then(setFavorites)
+    AsyncStorage.getItem("simpleBible:progress").then((raw) => {
+      if (!raw) return
+      try {
+        const prog = JSON.parse(raw)
+        const bookList = getBooksFromVersion(prog.version ?? "NVI")
+        const bookData = bookList.find((b: any) => b.abbrev === prog.bookAbbrev)
+        if (bookData) {
+          setReadingProgress({
+            bookAbbrev: prog.bookAbbrev,
+            bookName: bookData.book,
+            chapter: prog.chapter,
+            verse: prog.verse,
+            version: prog.version ?? "NVI",
+          })
+        }
+      } catch {}
+    })
+    const init = async () => {
+      const verse = getRandomVerse("NVI")
+      const daily = getDailyVerse("NVI")
+      if (verse) { setVerseHistory([verse]); setHistoryIndex(0) }
+      setDailyVerse(daily)
+      const bookList = getBooksFromVersion("NVI")
+      setBooks(bookList)
+      if (bookList.length > 0) setSelectedBook(bookList[0].abbrev)
+    }
+    init()
   }, [])
 
-  const handleNewVerse = async () => {
+  useEffect(() => {
+    const bookList = getBooksFromVersion(selectedVersion)
+    setBooks(bookList)
+    if (bookList.length > 0) setSelectedBook(bookList[0].abbrev)
+    const daily = getDailyVerse(selectedVersion)
+    setDailyVerse(daily)
+  }, [selectedVersion])
+
+  useEffect(() => {
+    if (mode === "navigate" && selectedBook) {
+      const verses = getChapterVerses(selectedVersion, selectedBook, selectedChapter)
+      setChapterVerses(verses)
+    }
+  }, [mode, selectedBook, selectedChapter, selectedVersion])
+
+  const loadNewVerse = () => {
     setIsLoading(true)
-    try {
-      // Pequeno delay para melhor UX
-      await new Promise((resolve) => setTimeout(resolve, 500))
+    setTimeout(() => {
       const verse = getRandomVerse(selectedVersion)
-      setCurrentVerse(verse)
-    } catch (error) {
-      console.error("Erro ao carregar versículo:", error)
-      Alert.alert("Erro", "Não foi possível carregar um novo versículo.")
-    } finally {
+      if (verse) {
+        const newHistory = verseHistory.slice(0, historyIndex + 1)
+        newHistory.push(verse)
+        setVerseHistory(newHistory)
+        setHistoryIndex(newHistory.length - 1)
+      }
       setIsLoading(false)
+    }, 400)
+  }
+
+  const handlePrev = () => {
+    if (historyIndex > 0) setHistoryIndex(historyIndex - 1)
+  }
+
+  const handleNext = () => {
+    if (historyIndex < verseHistory.length - 1) {
+      setHistoryIndex(historyIndex + 1)
+    } else {
+      loadNewVerse()
     }
   }
 
-  const handleVersionChange = async (version: string) => {
-    setSelectedVersion(version)
-    setIsLoading(true)
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      const verse = getRandomVerse(version)
-      setCurrentVerse(verse)
-    } catch (error) {
-      console.error("Erro ao trocar versão:", error)
-      Alert.alert("Erro", "Não foi possível carregar versículo da nova versão.")
-    } finally {
-      setIsLoading(false)
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return
+    setIsSearching(true)
+    setHasSearched(false)
+    setTimeout(() => {
+      const results = searchVerses(selectedVersion, searchQuery)
+      setSearchResults(results)
+      setHasSearched(true)
+      setIsSearching(false)
+    }, 300)
+  }
+
+  const toggleFavorite = async (verse: BibleVerse) => {
+    const isFav = favorites.some(
+      (f) => f.book === verse.book && f.chapter === verse.chapter && f.verse === verse.verse
+    )
+    let updated: FavoriteVerse[]
+    if (isFav) {
+      updated = favorites.filter(
+        (f) => !(f.book === verse.book && f.chapter === verse.chapter && f.verse === verse.verse)
+      )
+    } else {
+      updated = [...favorites, { ...verse, savedAt: new Date().toISOString() }]
     }
+    setFavorites(updated)
+    await saveFavoritesToStorage(updated)
+  }
+
+  const isFavorite = (verse: BibleVerse | null) => {
+    if (!verse) return false
+    return favorites.some(
+      (f) => f.book === verse.book && f.chapter === verse.chapter && f.verse === verse.verse
+    )
+  }
+
+  const handleShare = async (verse: BibleVerse | null) => {
+    if (!verse) return
+    const ref = formatReference(verse.book, verse.chapter, verse.verse)
+    await Share.share({ message: `"${verse.text}" — ${ref} (${verse.version})` })
   }
 
   const handleReset = () => {
@@ -85,504 +215,519 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset })
     ])
   }
 
-  useEffect(() => {
-    const loadInitialVerse = async () => {
-      setIsLoading(true)
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 800))
-        const verse = getRandomVerse(selectedVersion)
-        setCurrentVerse(verse)
-      } catch (error) {
-        console.error("Erro ao carregar versículo inicial:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const displayVerse = mode === "daily" ? dailyVerse : currentVerse
 
-    loadInitialVerse()
-  }, [])
-
-  const cloudTranslateX = cloudAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 30],
-  })
-
-  return (
-    <LinearGradient colors={["#60A5FA", "#93C5FD", "#DBEAFE"]} style={styles.container}>
-      {/* Animated clouds effect */}
-      <View style={styles.cloudsContainer}>
-        <Animated.View style={[styles.cloud, styles.cloud1, { transform: [{ translateX: cloudTranslateX }] }]} />
-        <Animated.View
-          style={[styles.cloud, styles.cloud2, { transform: [{ translateX: Animated.multiply(cloudTranslateX, -1) }] }]}
-        />
-        <Animated.View
-          style={[
-            styles.cloud,
-            styles.cloud3,
-            { transform: [{ translateX: Animated.multiply(cloudTranslateX, 0.5) }] },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.cloud,
-            styles.cloud4,
-            { transform: [{ translateX: Animated.multiply(cloudTranslateX, -0.7) }] },
-          ]}
-        />
-        <Animated.View style={[styles.cloud, styles.cloud5, { transform: [{ translateX: cloudTranslateX }] }]} />
-        <Animated.View
-          style={[
-            styles.cloud,
-            styles.cloud6,
-            { transform: [{ translateX: Animated.multiply(cloudTranslateX, -0.3) }] },
-          ]}
-        />
-      </View>
-
-      <Animated.View style={[styles.content, { opacity: fadeAnimation }]}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={styles.greeting}>Olá, {userData.name}! 🙏</Text>
-              <Text style={styles.date}>{getCurrentTime()}</Text>
-            </View>
+  const renderModeButtons = () => (
+    <View style={styles.modeGrid}>
+      {(["random", "daily", "navigate", "search"] as Mode[]).map((m) => {
+          const icons: Record<Mode, string> = { random: "shuffle", daily: "today", navigate: "book", search: "search" }
+          const labels: Record<Mode, string> = { random: "Aleatório", daily: "Diário", navigate: "Navegar", search: "Buscar" }
+          return (
             <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={() => setShowUserInfo(!showUserInfo)}
+              key={m}
+              style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
+              onPress={() => setMode(m)}
               activeOpacity={0.7}
             >
-              <MaterialIcons name="settings" size={24} color="#FFFFFF" />
+              <MaterialIcons name={icons[m] as any} size={20} color={mode === m ? "#FFFFFF" : "rgba(255,255,255,0.7)"} />
+              <Text style={[styles.modeBtnText, mode === m && styles.modeBtnTextActive]}>{labels[m]}</Text>
+            </TouchableOpacity>
+          )
+        })}
+    </View>
+  )
+
+  const renderVerseActions = (verse: BibleVerse | null) => verse ? (
+    <View style={styles.verseActions}>
+      <TouchableOpacity style={styles.actionBtn} onPress={() => toggleFavorite(verse)} activeOpacity={0.7}>
+        <MaterialIcons name={isFavorite(verse) ? "favorite" : "favorite-border"} size={22} color={isFavorite(verse) ? "#EF4444" : "#6B7280"} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.actionBtn} onPress={() => handleShare(verse)} activeOpacity={0.7}>
+        <MaterialIcons name="share" size={22} color="#6B7280" />
+      </TouchableOpacity>
+    </View>
+  ) : null
+
+  const renderRandomMode = () => (
+    <View style={styles.verseCard}>
+      <LinearGradient colors={["rgba(30,64,175,0.06)", "transparent"]} style={StyleSheet.absoluteFillObject} />
+      <View style={styles.verseHeader}>
+        <MaterialIcons name="menu-book" size={28} color="#1E40AF" />
+        <Text style={styles.verseTitle}>Versículo do Momento</Text>
+      </View>
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Carregando...</Text>
+        </View>
+      ) : currentVerse ? (
+        <>
+          <Text style={styles.verseText}>"{currentVerse.text}"</Text>
+          <View style={styles.verseReference}>
+            <Text style={styles.referenceText}>{formatReference(currentVerse.book, currentVerse.chapter, currentVerse.verse)}</Text>
+            <Text style={styles.versionText}>Versão: {availableVersions.find((v) => v.abbreviation === selectedVersion)?.name}</Text>
+          </View>
+          {renderVerseActions(currentVerse)}
+        </>
+      ) : null}
+      <View style={styles.navRow}>
+        <TouchableOpacity style={[styles.navBtn, historyIndex <= 0 && styles.btnDisabled]} onPress={handlePrev} disabled={historyIndex <= 0} activeOpacity={0.7}>
+          <MaterialIcons name="chevron-left" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.newVerseButton, isLoading && styles.btnDisabled]} onPress={loadNewVerse} disabled={isLoading} activeOpacity={0.8}>
+          <LinearGradient colors={["#0EA5E9", "#2563EB"]} style={styles.buttonGradient}>
+            <MaterialIcons name="shuffle" size={18} color="#FFFFFF" />
+            <Text style={styles.buttonText}>Novo Versículo</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navBtn} onPress={handleNext} activeOpacity={0.7}>
+          <MaterialIcons name="chevron-right" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+
+  const renderDailyMode = () => (
+    <View style={styles.verseCard}>
+      <LinearGradient colors={["rgba(234,179,8,0.08)", "transparent"]} style={StyleSheet.absoluteFillObject} />
+      <View style={styles.verseHeader}>
+        <MaterialIcons name="today" size={28} color="#D97706" />
+        <Text style={[styles.verseTitle, { color: "#92400E" }]}>Versículo do Dia</Text>
+      </View>
+      {dailyVerse ? (
+        <>
+          <Text style={styles.verseText}>"{dailyVerse.text}"</Text>
+          <View style={styles.verseReference}>
+            <Text style={styles.referenceText}>{formatReference(dailyVerse.book, dailyVerse.chapter, dailyVerse.verse)}</Text>
+            <Text style={styles.versionText}>Versão: {availableVersions.find((v) => v.abbreviation === selectedVersion)?.name}</Text>
+          </View>
+          {renderVerseActions(dailyVerse)}
+        </>
+      ) : <ActivityIndicator size="large" color="#D97706" />}
+    </View>
+  )
+
+  const renderNavigateMode = () => {
+    const selectedBookData = books.find((b) => b.abbrev === selectedBook)
+    const chapterCount = selectedBookData?.chapters.length ?? 1
+    return (
+      <View style={styles.verseCard}>
+        <View style={styles.verseHeader}>
+          <MaterialIcons name="book" size={28} color="#059669" />
+          <Text style={[styles.verseTitle, { color: "#065F46" }]}>Navegar</Text>
+          {onReaderPress && (
+            <TouchableOpacity
+              style={styles.openReaderBtn}
+              onPress={() => onReaderPress?.({ book: selectedBook, chapter: selectedChapter, version: selectedVersion })}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="menu-book" size={14} color="#FFFFFF" />
+              <Text style={styles.openReaderBtnText}>Abrir no Leitor</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.navigateSelectors}>
+          <View style={styles.pickerContainer}>
+            <Text style={styles.pickerLabel}>Livro</Text>
+            <Picker selectedValue={selectedBook} onValueChange={(v) => { setSelectedBook(v); setSelectedChapter(1) }} style={styles.picker} dropdownIconColor="#374151">
+              {books.map((b) => <Picker.Item key={b.abbrev} label={b.book} value={b.abbrev} color="#000000" />)}
+            </Picker>
+          </View>
+          <View style={styles.pickerContainer}>
+            <Text style={styles.pickerLabel}>Capítulo</Text>
+            <Picker selectedValue={selectedChapter} onValueChange={(v) => setSelectedChapter(Number(v))} style={styles.picker} dropdownIconColor="#374151">
+              {Array.from({ length: chapterCount }, (_, i) => i + 1).map((c) => (
+                <Picker.Item key={c} label={`Capítulo ${c}`} value={c} color="#000000" />
+              ))}
+            </Picker>
+          </View>
+        </View>
+        {chapterVerses.length > 0 ? (
+          <ScrollView style={styles.chapterScroll} nestedScrollEnabled>
+            {chapterVerses.map((v) => (
+              <TouchableOpacity key={v.verse} style={styles.chapterVerseRow} onLongPress={() => handleShare(v)} activeOpacity={0.8}>
+                <Text style={styles.chapterVerseNum}>{v.verse}</Text>
+                <Text style={styles.chapterVerseText}>{v.text}</Text>
+                <TouchableOpacity onPress={() => toggleFavorite(v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name={isFavorite(v) ? "favorite" : "favorite-border"} size={16} color={isFavorite(v) ? "#EF4444" : "#D1D5DB"} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : <ActivityIndicator size="large" color="#059669" style={{ marginVertical: 24 }} />}
+      </View>
+    )
+  }
+
+  const renderSearchMode = () => (
+    <View style={styles.verseCard}>
+      <View style={styles.verseHeader}>
+        <MaterialIcons name="search" size={28} color="#7C3AED" />
+        <Text style={[styles.verseTitle, { color: "#4C1D95" }]}>Pesquisar</Text>
+      </View>
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar palavra ou trecho..."
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+        />
+        <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} activeOpacity={0.8}>
+          <LinearGradient colors={["#7C3AED", "#5B21B6"]} style={styles.searchBtnGradient}>
+            <MaterialIcons name="search" size={20} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+      {isSearching && <ActivityIndicator size="large" color="#7C3AED" style={{ marginVertical: 24 }} />}
+      {hasSearched && !isSearching && (
+        searchResults.length === 0 ? (
+          <Text style={styles.emptyText}>Nenhum resultado encontrado.</Text>
+        ) : (
+          <>
+            <Text style={styles.resultsCount}>{searchResults.length} resultado(s)</Text>
+            <ScrollView style={styles.chapterScroll} nestedScrollEnabled>
+              {searchResults.map((v, i) => (
+                <TouchableOpacity key={i} style={styles.chapterVerseRow} onPress={() => handleShare(v)} activeOpacity={0.8}>
+                  <View style={styles.searchResultHeader}>
+                    <Text style={styles.searchResultRef}>{formatReference(v.book, v.chapter, v.verse)}</Text>
+                    <TouchableOpacity onPress={() => toggleFavorite(v)}>
+                      <MaterialIcons name={isFavorite(v) ? "favorite" : "favorite-border"} size={16} color={isFavorite(v) ? "#EF4444" : "#D1D5DB"} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.chapterVerseText}>{v.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </>
+        )
+      )}
+    </View>
+  )
+
+  return (
+    <View style={styles.container}>
+      <CelestialBackground />
+      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+        <Animated.View style={[styles.content, { opacity: fadeAnimation }]}>
+          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <View style={styles.greetingPill}>
+                  <Text style={styles.greeting}>Olá, {userData.name}! 🙏</Text>
+                </View>
+                <Text style={styles.date}>{getCurrentTime()}</Text>
+              </View>
+              <View style={styles.headerActions}>
+                {onReaderPress && (
+                  <TouchableOpacity style={styles.iconButton} onPress={() => readingProgress ? setShowReaderModal(true) : onReaderPress?.()} activeOpacity={0.7}>
+                    <MaterialIcons name="menu-book" size={22} color="#FFFFFF" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={styles.iconButton} onPress={() => setShowFavorites(true)} activeOpacity={0.7}>
+                  <MaterialIcons name="favorite" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconButton} onPress={() => setShowUserInfo(!showUserInfo)} activeOpacity={0.7}>
+                  <MaterialIcons name="settings" size={22} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* User Info Card */}
+            {showUserInfo && (
+              <View style={styles.userInfoCard}>
+                <View style={styles.userInfoRow}>
+                  <MaterialIcons name="person" size={18} color="#FFFFFF" />
+                  <Text style={styles.userInfoText}>{userData.name}</Text>
+                </View>
+                <View style={styles.userInfoRow}>
+                  <MaterialIcons name="church" size={18} color="#FFFFFF" />
+                  <Text style={styles.userInfoText}>{userData.church}</Text>
+                </View>
+                <View style={styles.userInfoActions}>
+                  <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.7}>
+                    <Text style={styles.resetButtonText}>Redefinir dados</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowUserInfo(false)} style={{ padding: 8 }}>
+                    <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Version Selector — glassmorphism card, no label row */}
+            <View style={styles.versionCard}>
+              <View style={styles.versionPickerWrap}>
+                <Picker selectedValue={selectedVersion} onValueChange={setSelectedVersion} style={styles.versionPicker} dropdownIconColor="#FFFFFF">
+                  {availableVersions.map((v) => (
+                    <Picker.Item key={v.abbreviation} label={`${v.name} (${v.abbreviation})`} value={v.abbreviation} color="#000000" />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
+            {/* Mode Buttons */}
+            {renderModeButtons()}
+
+            {/* Content by Mode */}
+            {mode === "random"   && renderRandomMode()}
+            {mode === "daily"    && renderDailyMode()}
+            {mode === "navigate" && renderNavigateMode()}
+            {mode === "search"   && renderSearchMode()}
+
+            {/* Footer */}
+            <View style={styles.footerText}>
+              <View style={styles.footerPill}>
+                <Text style={styles.footerMessage}>Que a palavra de Deus ilumine seu dia! ✨</Text>
+                <Text style={styles.footerChurch}>Igreja: {userData.church}</Text>
+              </View>
+            </View>
+
+            <AppFooter onPrivacyPress={onPrivacyPress} />
+          </ScrollView>
+        </Animated.View>
+      </SafeAreaView>
+
+      {/* Modal Favoritos */}
+      <Modal visible={showFavorites} animationType="slide" onRequestClose={() => setShowFavorites(false)}>
+        <SafeAreaView style={styles.modalSafe} edges={["top"]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>❤️ Favoritos</Text>
+            <TouchableOpacity onPress={() => setShowFavorites(false)}>
+              <MaterialIcons name="close" size={24} color="#374151" />
             </TouchableOpacity>
           </View>
-
-          {/* User Info Card */}
-          {showUserInfo && (
-            <Animated.View
-              style={[
-                styles.userInfoCard,
-                {
-                  opacity: fadeAnimation,
-                  transform: [
-                    {
-                      translateY: fadeAnimation.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [-20, 0],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            >
-              <View style={styles.userInfoContent}>
-                <View style={styles.userInfoItem}>
-                  <MaterialIcons name="person" size={20} color="#FFFFFF" />
-                  <Text style={styles.userInfoText}>Nome: {userData.name}</Text>
-                </View>
-                <View style={styles.userInfoItem}>
-                  <MaterialIcons name="church" size={20} color="#FFFFFF" />
-                  <Text style={styles.userInfoText}>Igreja: {userData.church}</Text>
-                </View>
-              </View>
-              <View style={styles.userInfoActions}>
-                <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.7}>
-                  <Text style={styles.resetButtonText}>Redefinir</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.closeButton} onPress={() => setShowUserInfo(false)} activeOpacity={0.7}>
-                  <MaterialIcons name="close" size={20} color="rgba(255, 255, 255, 0.7)" />
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          )}
-
-          {/* Version Selector */}
-          <View style={styles.versionCard}>
-            <View style={styles.versionHeader}>
-              <MaterialIcons name="book" size={20} color="#FCD34D" />
-              <Text style={styles.versionLabel}>Versão da Bíblia:</Text>
+          {favorites.length === 0 ? (
+            <View style={styles.emptyFavContainer}>
+              <MaterialIcons name="favorite-border" size={48} color="#D1D5DB" />
+              <Text style={styles.emptyText}>Nenhum favorito ainda.</Text>
+              <Text style={styles.emptySubText}>Toque no coração em um versículo para salvar.</Text>
             </View>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={selectedVersion}
-                onValueChange={handleVersionChange}
-                enabled={!isLoading}
-                style={styles.picker}
-                dropdownIconColor="#FFFFFF"
-              >
-                {availableVersions.map((version) => (
-                  <Picker.Item
-                    key={version.abbreviation}
-                    label={`${version.name} (${version.abbreviation})`}
-                    value={version.abbreviation}
-                    color="#000000"
-                  />
-                ))}
-              </Picker>
-            </View>
-          </View>
-
-          {/* Main Verse Card */}
-          <View style={styles.verseCard}>
-            <View style={styles.verseHeader}>
-              <MaterialIcons name="menu-book" size={32} color="#1E40AF" />
-              <Text style={styles.verseTitle}>Versículo do Momento</Text>
-            </View>
-
-            <View style={styles.verseContent}>
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#3B82F6" />
-                  <Text style={styles.loadingText}>Carregando versículo...</Text>
-                </View>
-              ) : currentVerse ? (
-                <View style={styles.verseTextContainer}>
-                  <Text style={styles.verseText}>"{currentVerse.text}"</Text>
-                  <View style={styles.verseReference}>
-                    <Text style={styles.referenceText}>
-                      {formatReference(currentVerse.book, currentVerse.chapter, currentVerse.verse)}
-                    </Text>
-                    <Text style={styles.versionText}>
-                      Versão: {availableVersions.find((v) => v.abbreviation === selectedVersion)?.name}
-                    </Text>
+          ) : (
+            <FlatList
+              data={favorites}
+              keyExtractor={(item, i) => `${item.book}-${item.chapter}-${item.verse}-${i}`}
+              contentContainerStyle={{ padding: 16, gap: 12 }}
+              renderItem={({ item }) => (
+                <View style={styles.favCard}>
+                  <Text style={styles.favVerse}>"{item.text}"</Text>
+                  <View style={styles.favRefRow}>
+                    <Text style={styles.favRef}>{formatReference(item.book, item.chapter, item.verse)} ({item.version})</Text>
+                    <View style={styles.favActions}>
+                      <TouchableOpacity onPress={() => handleShare(item)} style={{ marginRight: 8 }}>
+                        <MaterialIcons name="share" size={18} color="#6B7280" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => toggleFavorite(item)}>
+                        <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              ) : (
-                <View style={styles.errorContainer}>
-                  <MaterialIcons name="error-outline" size={48} color="#EF4444" />
-                  <Text style={styles.errorText}>Não foi possível carregar o versículo. Tente novamente.</Text>
-                </View>
               )}
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
 
+      {/* Modal de retomada de leitura */}
+      <Modal visible={showReaderModal} animationType="fade" transparent onRequestClose={() => setShowReaderModal(false)}>
+        <TouchableOpacity style={styles.readerModalBackdrop} activeOpacity={1} onPress={() => setShowReaderModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.readerModalCard} onPress={() => {}}>
+            {/* Header */}
+            <LinearGradient colors={["#1D4ED8", "#0EA5E9"]} style={styles.readerModalHeader}>
+              <Text style={styles.readerModalLabel}>LEITURA</Text>
+              <Text style={styles.readerModalTitle}>Como deseja continuar?</Text>
+            </LinearGradient>
+
+            <View style={styles.readerModalBody}>
+              {readingProgress?.verse ? (
+                <>
+                  {/* Continuar do versículo marcado */}
+                  <TouchableOpacity
+                    style={[styles.readerOption, styles.readerOptionPrimary]}
+                    onPress={() => {
+                      setShowReaderModal(false)
+                      onReaderPress?.({ book: readingProgress.bookAbbrev, chapter: readingProgress.chapter, verse: readingProgress.verse, version: readingProgress.version })
+                    }}
+                  >
+                    <MaterialIcons name="bookmark" size={18} color="#1D4ED8" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.readerOptionTitle}>Continuar do versículo marcado</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} {readingProgress.chapter}:{readingProgress.verse}</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Abrir o capítulo do início */}
+                  <TouchableOpacity
+                    style={styles.readerOption}
+                    onPress={() => {
+                      setShowReaderModal(false)
+                      onReaderPress?.({ book: readingProgress.bookAbbrev, chapter: readingProgress.chapter, version: readingProgress.version })
+                    }}
+                  >
+                    <MaterialIcons name="menu-book" size={18} color="#6B7280" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.readerOptionTitle}>Abrir o capítulo do início</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} — Capítulo {readingProgress.chapter}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : readingProgress ? (
+                <>
+                  {/* Continuar do capítulo */}
+                  <TouchableOpacity
+                    style={[styles.readerOption, styles.readerOptionPrimary]}
+                    onPress={() => {
+                      setShowReaderModal(false)
+                      onReaderPress?.({ book: readingProgress.bookAbbrev, chapter: readingProgress.chapter, version: readingProgress.version })
+                    }}
+                  >
+                    <MaterialIcons name="play-arrow" size={18} color="#1D4ED8" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.readerOptionTitle}>Continuar do capítulo {readingProgress.chapter}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName}</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Já li, ir para o próximo */}
+                  <TouchableOpacity
+                    style={styles.readerOption}
+                    onPress={() => {
+                      setShowReaderModal(false)
+                      onReaderPress?.({ book: readingProgress.bookAbbrev, chapter: readingProgress.chapter + 1, version: readingProgress.version })
+                    }}
+                  >
+                    <MaterialIcons name="skip-next" size={18} color="#6B7280" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.readerOptionTitle}>Já li o cap. {readingProgress.chapter}, ir para o {readingProgress.chapter + 1}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+
+              {/* Começar do início */}
               <TouchableOpacity
-                style={[styles.newVerseButton, isLoading && styles.buttonDisabled]}
-                onPress={handleNewVerse}
-                disabled={isLoading}
-                activeOpacity={0.8}
+                style={styles.readerOptionReset}
+                onPress={() => { setShowReaderModal(false); onReaderPress?.() }}
               >
-                <LinearGradient colors={["#3B82F6", "#1D4ED8"]} style={styles.buttonGradient}>
-                  <MaterialIcons
-                    name="refresh"
-                    size={20}
-                    color="#FFFFFF"
-                    style={[styles.buttonIcon, isLoading && styles.spinningIcon]}
-                  />
-                  <Text style={styles.buttonText}>{isLoading ? "Carregando..." : "Novo Versículo"}</Text>
-                </LinearGradient>
+                <Text style={styles.readerOptionResetText}>Começar do início (Gênesis 1)</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Que a palavra de Deus ilumine seu dia! ✨</Text>
-            <Text style={styles.footerChurch}>Igreja: {userData.church}</Text>
-          </View>
-        </ScrollView>
-      </Animated.View>
-    </LinearGradient>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  cloudsContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  cloud: {
-    position: "absolute",
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    borderRadius: 50,
-  },
-  cloud1: {
-    width: 120,
-    height: 60,
-    top: 40,
-    left: 40,
-  },
-  cloud2: {
-    width: 160,
-    height: 80,
-    top: 80,
-    right: 80,
-  },
-  cloud3: {
-    width: 100,
-    height: 50,
-    top: 120,
-    left: "30%",
-  },
-  cloud4: {
-    width: 140,
-    height: 70,
-    top: 160,
-    right: "30%",
-  },
-  cloud5: {
-    width: 180,
-    height: 90,
-    top: 240,
-    left: "20%",
-  },
-  cloud6: {
-    width: 120,
-    height: 60,
-    top: 320,
-    right: "20%",
-  },
-  content: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingTop: 50,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
-  },
-  headerText: {
-    flex: 1,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  date: {
-    fontSize: 16,
-    color: "rgba(255, 255, 255, 0.9)",
-    textTransform: "capitalize",
-    marginTop: 4,
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  settingsButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 25,
-    width: 50,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-  },
-  userInfoCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  userInfoContent: {
-    marginBottom: 15,
-  },
-  userInfoItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  userInfoText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  userInfoActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resetButton: {
-    backgroundColor: "rgba(252, 11, 11, 0.2)",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(239, 68, 68, 0.3)",
-  },
-  resetButtonText: {
-    color: "#ff0000",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  closeButton: {
-    padding: 8,
-  },
-  versionCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  versionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  versionLabel: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 8,
-  },
-  pickerContainer: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.3)",
-  },
-  picker: {
-    color: "#FFFFFF",
-    height: 50,
-  },
-  verseCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderRadius: 20,
-    padding: 25,
-    marginBottom: 30,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  verseHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  verseTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#1E40AF",
-    marginLeft: 10,
-  },
-  verseContent: {
-    alignItems: "center",
-  },
-  loadingContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  loadingText: {
-    color: "#6B7280",
-    fontSize: 16,
-    marginTop: 15,
-  },
-  verseTextContainer: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  verseText: {
-    fontSize: 18,
-    fontWeight: "500",
-    color: "#374151",
-    lineHeight: 28,
-    fontStyle: "italic",
-    textAlign: "center",
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  verseReference: {
-    alignItems: "center",
-  },
-  referenceText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#3B82F6",
-    marginBottom: 5,
-  },
-  versionText: {
-    fontSize: 12,
-    color: "#6B7280",
-  },
-  errorContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  errorText: {
-    color: "#6B7280",
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 10,
-  },
-  newVerseButton: {
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-  },
-  buttonIcon: {
-    marginRight: 8,
-  },
-  spinningIcon: {
-    // Você pode adicionar animação de rotação aqui se desejar
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  footer: {
-    alignItems: "center",
-    paddingBottom: 30,
-  },
-  footerText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.9)",
-    textAlign: "center",
-    marginBottom: 8,
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  footerChurch: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.9)",
-    textShadowColor: "rgba(0, 0, 0, 0.3)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
+  container:     { flex: 1, backgroundColor: "transparent" },
+  safeArea:      { flex: 1, backgroundColor: "transparent" },
+  content:       { flex: 1, backgroundColor: "transparent" },
+  scrollView:    { flex: 1, backgroundColor: "transparent" },
+  scrollContent: { padding: 16, gap: 14, backgroundColor: "transparent" },
+
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  headerText: { flex: 1 },
+  greetingPill: { alignSelf: "flex-start", backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  greeting: { fontSize: 24, fontWeight: "bold", color: "#FFFFFF" },
+  date: { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2, backgroundColor: "rgba(0,0,0,0.2)", alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  iconButton: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 25, width: 44, height: 44, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+
+  userInfoCard: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", gap: 8 },
+  userInfoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  userInfoText: { color: "#FFFFFF", fontSize: 14 },
+  userInfoActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
+  resetButton: { backgroundColor: "rgba(239,68,68,0.2)", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
+  resetButtonText: { color: "#EF4444", fontSize: 13, fontWeight: "500" },
+
+  // Version card — glassmorphism, no label row
+  versionCard: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
+  versionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  versionLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "500" },
+  versionPickerWrap: { backgroundColor: "transparent", overflow: "hidden" },
+  versionPicker: { color: "#FFFFFF", height: 52 },
+
+  // Mode row — horizontal scroll, bigger tabs
+  modeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  modeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, width: "48%", paddingVertical: 12, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.25)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  modeBtnActive: { backgroundColor: "#1D4ED8", borderColor: "#3B82F6" },
+  modeBtnText: { color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "500" },
+  modeBtnTextActive: { color: "#FFFFFF", fontWeight: "700" },
+
+  verseCard: { backgroundColor: "rgba(255,255,255,0.97)", borderRadius: 24, padding: 20, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10 },
+  verseHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" },
+  openReaderBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#059669", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
+  openReaderBtnText: { color: "#FFFFFF", fontSize: 11, fontWeight: "600" },
+  verseTitle: { fontSize: 18, fontWeight: "bold", color: "#1E40AF" },
+  loadingContainer: { alignItems: "center", paddingVertical: 32, gap: 10 },
+  loadingText: { color: "#6B7280", fontSize: 14 },
+  verseText: { fontSize: 17, fontWeight: "500", color: "#374151", lineHeight: 26, fontStyle: "italic", textAlign: "center", marginBottom: 16 },
+  verseReference: { alignItems: "center", gap: 4, marginBottom: 12 },
+  referenceText: { fontSize: 15, fontWeight: "bold", color: "#3B82F6" },
+  versionText: { fontSize: 12, color: "#6B7280" },
+  verseActions: { flexDirection: "row", justifyContent: "center", gap: 16, marginBottom: 16 },
+  actionBtn: { padding: 8, backgroundColor: "#F9FAFB", borderRadius: 20, borderWidth: 1, borderColor: "#E5E7EB" },
+
+  navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  navBtn: { backgroundColor: "rgba(30,64,175,0.7)", borderRadius: 10, padding: 8 },
+  newVerseButton: { flex: 1, borderRadius: 12, overflow: "hidden", elevation: 4 },
+  buttonGradient: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
+  buttonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
+  btnDisabled: { opacity: 0.5 },
+
+  navigateSelectors: { gap: 10, marginBottom: 12 },
+  pickerContainer: { backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", paddingHorizontal: 8, paddingBottom: Platform.OS === "android" ? 4 : 0, overflow: "hidden" },
+  pickerLabel: { fontSize: 11, fontWeight: "600", color: "#6B7280", marginTop: 6, marginLeft: 4, textTransform: "uppercase", letterSpacing: 0.5 },
+  picker: { color: "#1F2937", height: Platform.OS === "android" ? 56 : 48 },
+  chapterScroll: { maxHeight: 320 },
+  chapterVerseRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  chapterVerseNum: { fontSize: 11, fontWeight: "bold", color: "#3B82F6", minWidth: 22, marginTop: 2 },
+  chapterVerseText: { flex: 1, fontSize: 14, color: "#374151", lineHeight: 20 },
+
+  searchRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  searchInput: { flex: 1, height: 44, backgroundColor: "#F9FAFB", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, paddingHorizontal: 14, fontSize: 15, color: "#1F2937" },
+  searchBtn: { width: 44, height: 44, borderRadius: 12, overflow: "hidden" },
+  searchBtnGradient: { flex: 1, justifyContent: "center", alignItems: "center" },
+  resultsCount: { fontSize: 12, color: "#6B7280", marginBottom: 8 },
+  searchResultHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
+  searchResultRef: { fontSize: 12, fontWeight: "bold", color: "#3B82F6" },
+  emptyText: { textAlign: "center", color: "#6B7280", marginTop: 16 },
+
+  // Footer — pill wrapping, no textShadow
+  footerText: { alignItems: "center" },
+  footerPill: { backgroundColor: "rgba(0,0,0,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, alignItems: "center", gap: 2 },
+  footerMessage: { fontSize: 14, fontWeight: "500", color: "rgba(255,255,255,0.95)", textAlign: "center" },
+  footerChurch: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+
+  modalSafe: { flex: 1, backgroundColor: "#FFFFFF" },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#1F2937" },
+  emptyFavContainer: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  emptySubText: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  favCard: { backgroundColor: "#F9FAFB", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#E5E7EB" },
+  favVerse: { fontSize: 15, color: "#374151", fontStyle: "italic", lineHeight: 22, marginBottom: 10 },
+  favRefRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  favRef: { fontSize: 12, fontWeight: "bold", color: "#3B82F6" },
+  favActions: { flexDirection: "row", alignItems: "center" },
+
+  // Reader modal
+  readerModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
+  readerModalCard: { width: "100%", maxWidth: 400, backgroundColor: "#FFFFFF", borderRadius: 24, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 },
+  readerModalHeader: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
+  readerModalLabel: { color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: "700", letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 },
+  readerModalTitle: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" },
+  readerModalBody: { padding: 16, gap: 8 },
+  readerOption: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F9FAFB", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, borderWidth: 1, borderColor: "#E5E7EB" },
+  readerOptionPrimary: { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" },
+  readerOptionTitle: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  readerOptionSub: { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  readerOptionReset: { alignItems: "center", paddingVertical: 10 },
+  readerOptionResetText: { fontSize: 13, color: "#9CA3AF" },
 })
