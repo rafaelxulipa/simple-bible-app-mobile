@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from "react"
 import { View, Animated, StyleSheet, useColorScheme, Dimensions } from "react-native"
 import { LinearGradient } from "expo-linear-gradient"
+import { SvgXml } from "react-native-svg"
+import { DAY_BACKGROUND_SVG, NIGHT_BACKGROUND_SVG } from "../assets/backgrounds/celestialSvg"
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window")
 
@@ -191,14 +193,34 @@ function NightSky() {
   )
 }
 
-// ── Componente principal ──────────────────────────────────────────────
-export function CelestialBackground() {
+// ── Implementação animada anterior (CSS/Views) ───────────────────────
+// Mantida aqui, só não é mais o que é renderizado por padrão — veja
+// CelestialBackground() abaixo. Pra voltar a usá-la, troque o corpo de
+// CelestialBackground() para renderizar <AnimatedCelestialBackground />.
+export function AnimatedCelestialBackground() {
   const colorScheme = useColorScheme()
   const isNight = colorScheme === "dark"
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {isNight ? <NightSky /> : <DaySky />}
+    </View>
+  )
+}
+
+// ── Componente principal — background estático em SVG (day-realistic.svg / night-realistic.svg) ──
+export function CelestialBackground() {
+  const colorScheme = useColorScheme()
+  const isNight = colorScheme === "dark"
+
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <SvgXml
+        xml={isNight ? NIGHT_BACKGROUND_SVG : DAY_BACKGROUND_SVG}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="xMidYMid slice"
+      />
     </View>
   )
 }

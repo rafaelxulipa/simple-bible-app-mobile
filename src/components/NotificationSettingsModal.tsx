@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react"
-import { Modal, View, Text, TouchableOpacity, StyleSheet, Switch, Platform, ScrollView } from "react-native"
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Switch, ScrollView } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { MaterialIcons } from "@expo/vector-icons"
-import { Picker } from "@react-native-picker/picker"
+import { SelectModal } from "./SelectModal"
 import {
   getNotificationSettings,
   saveNotificationSettings,
@@ -12,6 +12,8 @@ import {
   type NotificationSettings,
   type NotificationTime,
 } from "../utils/notifications"
+
+type EditingSlot = { index: number; field: "hour" | "minute" }
 
 interface NotificationSettingsModalProps {
   visible: boolean
@@ -28,6 +30,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   const [settings, setSettings] = useState<NotificationSettings | null>(null)
   const [draftTimes, setDraftTimes] = useState<NotificationTime[]>([])
   const [justSaved, setJustSaved] = useState(false)
+  const [editingSlot, setEditingSlot] = useState<EditingSlot | null>(null)
 
   useEffect(() => {
     if (visible) {
@@ -120,30 +123,16 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
                   <View key={index} style={styles.timeRow}>
                     <View style={styles.timePicker}>
                       <Text style={styles.pickerLabel}>Hora</Text>
-                      <Picker
-                        selectedValue={time.hour}
-                        onValueChange={(hour) => updateDraftTime(index, { hour: Number(hour) })}
-                        style={styles.picker}
-                        dropdownIconColor="#374151"
-                      >
-                        {HOURS.map((h) => (
-                          <Picker.Item key={h} label={String(h).padStart(2, "0")} value={h} color="#000000" />
-                        ))}
-                      </Picker>
+                      <TouchableOpacity style={styles.timeValueBtn} onPress={() => setEditingSlot({ index, field: "hour" })} activeOpacity={0.7}>
+                        <Text style={styles.timeValueText}>{String(time.hour).padStart(2, "0")}</Text>
+                      </TouchableOpacity>
                     </View>
                     <Text style={styles.timeSeparator}>:</Text>
                     <View style={styles.timePicker}>
                       <Text style={styles.pickerLabel}>Minuto</Text>
-                      <Picker
-                        selectedValue={time.minute}
-                        onValueChange={(minute) => updateDraftTime(index, { minute: Number(minute) })}
-                        style={styles.picker}
-                        dropdownIconColor="#374151"
-                      >
-                        {MINUTES.map((m) => (
-                          <Picker.Item key={m} label={String(m).padStart(2, "0")} value={m} color="#000000" />
-                        ))}
-                      </Picker>
+                      <TouchableOpacity style={styles.timeValueBtn} onPress={() => setEditingSlot({ index, field: "minute" })} activeOpacity={0.7}>
+                        <Text style={styles.timeValueText}>{String(time.minute).padStart(2, "0")}</Text>
+                      </TouchableOpacity>
                     </View>
                     <TouchableOpacity
                       style={[styles.removeBtn, draftTimes.length <= 1 && styles.removeBtnDisabled]}
@@ -183,6 +172,18 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
           </ScrollView>
         )}
       </SafeAreaView>
+
+      <SelectModal
+        visible={editingSlot !== null}
+        title={editingSlot?.field === "minute" ? "Selecionar minuto" : "Selecionar hora"}
+        layout="grid"
+        options={(editingSlot?.field === "minute" ? MINUTES : HOURS).map((n) => ({ label: String(n).padStart(2, "0"), value: n }))}
+        selectedValue={editingSlot ? draftTimes[editingSlot.index]?.[editingSlot.field] ?? 0 : 0}
+        onSelect={(value) => {
+          if (editingSlot) updateDraftTime(editingSlot.index, { [editingSlot.field]: value })
+        }}
+        onClose={() => setEditingSlot(null)}
+      />
     </Modal>
   )
 }
@@ -199,11 +200,12 @@ const styles = StyleSheet.create({
   timesSection: { gap: 10 },
   sectionLabel: { fontSize: 12, fontWeight: "700", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.5 },
   timeRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
-  timePicker: { flex: 1, backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", paddingHorizontal: 8, paddingBottom: Platform.OS === "android" ? 4 : 0, overflow: "hidden" },
+  timePicker: { flex: 1, backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", paddingHorizontal: 8, overflow: "hidden" },
   pickerLabel: { fontSize: 11, fontWeight: "600", color: "#6B7280", marginTop: 6, marginLeft: 4, textTransform: "uppercase", letterSpacing: 0.5 },
-  picker: { color: "#1F2937", height: Platform.OS === "android" ? 56 : 48 },
-  timeSeparator: { fontSize: 20, fontWeight: "bold", color: "#374151", marginBottom: Platform.OS === "android" ? 16 : 10 },
-  removeBtn: { padding: 10, marginBottom: Platform.OS === "android" ? 4 : 0 },
+  timeValueBtn: { paddingVertical: 12 },
+  timeValueText: { fontSize: 16, fontWeight: "600", color: "#1F2937" },
+  timeSeparator: { fontSize: 20, fontWeight: "bold", color: "#374151", marginBottom: 12 },
+  removeBtn: { padding: 10 },
   removeBtnDisabled: { opacity: 0.4 },
   addBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10, backgroundColor: "#EFF6FF", borderWidth: 1, borderColor: "#BFDBFE", borderStyle: "dashed" },
   addBtnText: { color: "#1D4ED8", fontSize: 14, fontWeight: "600" },

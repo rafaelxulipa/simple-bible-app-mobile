@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 2400" preserveAspectRatio="xMidYMid slice">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2E8BCB"/><stop offset=".48" stop-color="#62B8E8"/><stop offset="1" stop-color="#B9E5F7"/>
+  </linearGradient>
+  <radialGradient id="sunGlow"><stop stop-color="#FFFBE0" stop-opacity=".72"/><stop offset=".35" stop-color="#FFEFA3" stop-opacity=".28"/><stop offset="1" stop-color="#FFEFA3" stop-opacity="0"/></radialGradient>
+  <radialGradient id="sun"><stop stop-color="#FFFDF0"/><stop offset=".55" stop-color="#FFE98A"/><stop offset="1" stop-color="#FFC94F"/></radialGradient>
+  <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#FFF" stop-opacity=".88"/><stop offset="1" stop-color="#E9F6FB" stop-opacity=".42"/></linearGradient>
+  <filter id="blur30"><feGaussianBlur stdDeviation="30"/></filter>
+  <filter id="blur8"><feGaussianBlur stdDeviation="8"/></filter>
+</defs>
+
+<rect width="1080" height="2400" fill="url(#sky)"/>
+
+<!-- atmospheric haze -->
+<ellipse cx="540" cy="1050" rx="700" ry="520" fill="#FFF" opacity=".08" filter="url(#blur30)"/>
+
+<!-- large realistic sun -->
+<circle cx="850" cy="390" r="300" fill="url(#sunGlow)" filter="url(#blur30)"/>
+<circle cx="850" cy="390" r="215" fill="url(#sunGlow)"/>
+<circle cx="850" cy="390" r="128" fill="url(#sun)"/>
+<circle cx="820" cy="355" r="82" fill="#FFFDEB" opacity=".13" filter="url(#blur8)"/>
+
+<!-- soft clouds -->
+<g fill="url(#cloud)" opacity=".72" filter="url(#blur8)">
+  <ellipse cx="125" cy="700" rx="180" ry="55"/>
+  <ellipse cx="260" cy="675" rx="150" ry="75"/>
+  <ellipse cx="395" cy="710" rx="180" ry="55"/>
+  <ellipse cx="920" cy="820" rx="210" ry="58"/>
+  <ellipse cx="790" cy="800" rx="145" ry="70"/>
+</g>
+<g fill="#FFF" opacity=".22">
+  <ellipse cx="220" cy="690" rx="110" ry="42"/>
+  <ellipse cx="835" cy="805" rx="100" ry="40"/>
+</g>
+
+<!-- distant atmospheric clouds -->
+<g fill="#FFF" opacity=".12" filter="url(#blur30)">
+  <ellipse cx="80" cy="1160" rx="300" ry="70"/>
+  <ellipse cx="970" cy="1280" rx="330" ry="80"/>
+</g>
+</svg>

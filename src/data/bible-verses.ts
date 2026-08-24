@@ -23,7 +23,7 @@ export const bibleVersions: BibleVersion[] = [
   },
 ]
 
-export function getRandomVerse(versionAbbr = "NVI"): BibleVerse | null {
+export function getRandomVerse(versionAbbr = "ACF"): BibleVerse | null {
   const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
   if (!version || version.books.length === 0) return null
 
@@ -90,7 +90,7 @@ export function getSpecificVerse(
   }
 }
 
-export function getDailyVerse(versionAbbr = "NVI", date: Date = new Date()): BibleVerse | null {
+export function getDailyVerse(versionAbbr = "ACF", date: Date = new Date()): BibleVerse | null {
   const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
   if (!version || version.books.length === 0) return null
   const seed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate()

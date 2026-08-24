@@ -12,18 +12,19 @@ import {
   Share,
   Modal,
   FlatList,
-  Platform,
   Image,
+  useColorScheme,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialIcons } from "@expo/vector-icons"
-import { Picker } from "@react-native-picker/picker"
 import * as ImagePicker from "expo-image-picker"
 import { CelestialBackground } from "./CelestialBackground"
 import { AppFooter } from "./AppFooter"
 import { BottomTabBar } from "./BottomTabBar"
 import { NotificationSettingsModal } from "./NotificationSettingsModal"
+import { VersionSelectorModal } from "./VersionSelectorModal"
+import { SelectModal } from "./SelectModal"
 import type { UserData, BibleVerse, BibleBook } from "../types"
 import {
   getRandomVerse,
@@ -67,12 +68,14 @@ async function saveFavoritesToStorage(favorites: FavoriteVerse[]) {
 }
 
 export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, onPrivacyPress, onReaderPress }) => {
+  const isDarkMode = useColorScheme() === "dark"
   const [mode, setMode]                       = useState<Mode>("random")
-  const [selectedVersion, setSelectedVersion] = useState("NVI")
+  const [selectedVersion, setSelectedVersion] = useState("ACF")
   const [isLoading, setIsLoading]             = useState(false)
   const [showUserInfo, setShowUserInfo]       = useState(false)
   const [showFavorites, setShowFavorites]     = useState(false)
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+  const [showVersionSelector, setShowVersionSelector] = useState(false)
   const [photoUri, setPhotoUri] = useState<string | null>(null)
 
   // Modo aleatório — histórico para prev/next
@@ -97,10 +100,14 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   const [favorites, setFavorites] = useState<FavoriteVerse[]>([])
   const [readingProgress, setReadingProgress] = useState<{ bookAbbrev: string; bookName: string; chapter: number; verse?: number; version: string } | null>(null)
   const [showReaderModal, setShowReaderModal] = useState(false)
+  const [showBookSelector, setShowBookSelector] = useState(false)
+  const [showChapterSelector, setShowChapterSelector] = useState(false)
 
   const fadeAnimation = useRef(new Animated.Value(0)).current
   const availableVersions = getAvailableVersions()
   const currentVerse = historyIndex >= 0 ? verseHistory[historyIndex] : null
+  const selectedBookData = books.find((b) => b.abbrev === selectedBook)
+  const chapterCount = selectedBookData?.chapters.length ?? 1
 
   useEffect(() => {
     Animated.timing(fadeAnimation, { toValue: 1, duration: 1000, useNativeDriver: true }).start()
@@ -110,7 +117,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
       if (!raw) return
       try {
         const prog = JSON.parse(raw)
-        const bookList = getBooksFromVersion(prog.version ?? "NVI")
+        const bookList = getBooksFromVersion(prog.version ?? "ACF")
         const bookData = bookList.find((b: any) => b.abbrev === prog.bookAbbrev)
         if (bookData) {
           setReadingProgress({
@@ -118,17 +125,17 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
             bookName: bookData.book,
             chapter: prog.chapter,
             verse: prog.verse,
-            version: prog.version ?? "NVI",
+            version: prog.version ?? "ACF",
           })
         }
       } catch {}
     })
     const init = async () => {
-      const verse = getRandomVerse("NVI")
-      const daily = getDailyVerse("NVI")
+      const verse = getRandomVerse("ACF")
+      const daily = getDailyVerse("ACF")
       if (verse) { setVerseHistory([verse]); setHistoryIndex(0) }
       setDailyVerse(daily)
-      const bookList = getBooksFromVersion("NVI")
+      const bookList = getBooksFromVersion("ACF")
       setBooks(bookList)
       if (bookList.length > 0) setSelectedBook(bookList[0].abbrev)
     }
@@ -355,8 +362,6 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   )
 
   const renderNavigateMode = () => {
-    const selectedBookData = books.find((b) => b.abbrev === selectedBook)
-    const chapterCount = selectedBookData?.chapters.length ?? 1
     return (
       <View style={styles.verseCard}>
         <View style={styles.verseHeader}>
@@ -376,20 +381,20 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
           )}
         </View>
         <View style={styles.navigateSelectors}>
-          <View style={styles.pickerContainer}>
+          <TouchableOpacity style={styles.pickerContainer} onPress={() => setShowBookSelector(true)} activeOpacity={0.7}>
             <Text style={styles.pickerLabel}>Livro</Text>
-            <Picker selectedValue={selectedBook} onValueChange={(v) => { setSelectedBook(v); setSelectedChapter(1) }} style={styles.picker} dropdownIconColor="#374151">
-              {books.map((b) => <Picker.Item key={b.abbrev} label={b.book} value={b.abbrev} color="#000000" />)}
-            </Picker>
-          </View>
-          <View style={styles.pickerContainer}>
+            <View style={styles.pickerValueRow}>
+              <Text style={styles.pickerValueText} numberOfLines={1}>{selectedBookData?.book ?? "Selecionar"}</Text>
+              <MaterialIcons name="expand-more" size={20} color="#374151" />
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.pickerContainer} onPress={() => setShowChapterSelector(true)} activeOpacity={0.7}>
             <Text style={styles.pickerLabel}>Capítulo</Text>
-            <Picker selectedValue={selectedChapter} onValueChange={(v) => setSelectedChapter(Number(v))} style={styles.picker} dropdownIconColor="#374151">
-              {Array.from({ length: chapterCount }, (_, i) => i + 1).map((c) => (
-                <Picker.Item key={c} label={`Capítulo ${c}`} value={c} color="#000000" />
-              ))}
-            </Picker>
-          </View>
+            <View style={styles.pickerValueRow}>
+              <Text style={styles.pickerValueText}>Capítulo {selectedChapter}</Text>
+              <MaterialIcons name="expand-more" size={20} color="#374151" />
+            </View>
+          </TouchableOpacity>
         </View>
         {chapterVerses.length > 0 ? (
           <ScrollView style={styles.chapterScroll} nestedScrollEnabled>
@@ -485,19 +490,16 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
 
             {/* Version Selector */}
             <View style={styles.versionSection}>
-              <Text style={styles.versionSectionLabel}>Versão da Bíblia</Text>
-              <View style={styles.versionCard}>
+              <Text style={[styles.versionSectionLabel, isDarkMode && styles.versionSectionLabelDark]}>Versão da Bíblia</Text>
+              <TouchableOpacity style={styles.versionCard} onPress={() => setShowVersionSelector(true)} activeOpacity={0.8}>
                 <View style={styles.versionIconBadge}>
                   <MaterialIcons name="menu-book" size={18} color="#FFFFFF" />
                 </View>
-                <View style={styles.versionPickerWrap}>
-                  <Picker selectedValue={selectedVersion} onValueChange={setSelectedVersion} style={styles.versionPicker} dropdownIconColor="#1E293B">
-                    {availableVersions.map((v) => (
-                      <Picker.Item key={v.abbreviation} label={`${v.name} (${v.abbreviation})`} value={v.abbreviation} color="#000000" />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
+                <Text style={styles.versionCardText} numberOfLines={1}>
+                  {availableVersions.find((v) => v.abbreviation === selectedVersion)?.name} ({selectedVersion})
+                </Text>
+                <MaterialIcons name="expand-more" size={22} color="#1E293B" />
+              </TouchableOpacity>
             </View>
 
             {/* Mode Buttons */}
@@ -580,6 +582,36 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
 
       {/* Modal de configuração de notificações */}
       <NotificationSettingsModal visible={showNotificationSettings} onClose={() => setShowNotificationSettings(false)} />
+
+      {/* Modal de seleção de versão */}
+      <VersionSelectorModal
+        visible={showVersionSelector}
+        versions={availableVersions}
+        selectedVersion={selectedVersion}
+        onSelect={setSelectedVersion}
+        onClose={() => setShowVersionSelector(false)}
+      />
+
+      {/* Modal de seleção de livro */}
+      <SelectModal
+        visible={showBookSelector}
+        title="Selecionar livro"
+        options={books.map((b) => ({ label: b.book, value: b.abbrev }))}
+        selectedValue={selectedBook}
+        onSelect={(v) => { setSelectedBook(v); setSelectedChapter(1) }}
+        onClose={() => setShowBookSelector(false)}
+      />
+
+      {/* Modal de seleção de capítulo */}
+      <SelectModal
+        visible={showChapterSelector}
+        title="Selecionar capítulo"
+        layout="grid"
+        options={Array.from({ length: chapterCount }, (_, i) => i + 1).map((c) => ({ label: String(c), value: c }))}
+        selectedValue={selectedChapter}
+        onSelect={setSelectedChapter}
+        onClose={() => setShowChapterSelector(false)}
+      />
 
       {/* Modal de configurações do usuário */}
       <Modal visible={showUserInfo} animationType="slide" onRequestClose={() => setShowUserInfo(false)} transparent>
@@ -728,10 +760,10 @@ const styles = StyleSheet.create({
   // Version card — solid card with label above
   versionSection: { gap: 8 },
   versionSectionLabel: { color: "#1D4ED8", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginLeft: 6, textShadowColor: "rgba(255,255,255,0.7)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  versionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 18, paddingHorizontal: 10, paddingVertical: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  versionSectionLabelDark: { color: "#FFFFFF", textShadowColor: "rgba(0,0,0,0.4)" },
+  versionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 18, paddingHorizontal: 12, paddingVertical: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
   versionIconBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#1D4ED8", justifyContent: "center", alignItems: "center" },
-  versionPickerWrap: { flex: 1, backgroundColor: "transparent", overflow: "hidden" },
-  versionPicker: { color: "#1E293B", height: 52 },
+  versionCardText: { flex: 1, fontSize: 15, fontWeight: "600", color: "#1E293B" },
 
   // Mode row — 2x2 grid, light cards with the active one solid blue
   modeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -765,9 +797,10 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
 
   navigateSelectors: { gap: 10, marginBottom: 12 },
-  pickerContainer: { backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", paddingHorizontal: 8, paddingBottom: Platform.OS === "android" ? 4 : 0, overflow: "hidden" },
-  pickerLabel: { fontSize: 11, fontWeight: "600", color: "#6B7280", marginTop: 6, marginLeft: 4, textTransform: "uppercase", letterSpacing: 0.5 },
-  picker: { color: "#1F2937", height: Platform.OS === "android" ? 56 : 48 },
+  pickerContainer: { backgroundColor: "#F9FAFB", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", paddingHorizontal: 12 },
+  pickerLabel: { fontSize: 11, fontWeight: "600", color: "#6B7280", marginTop: 8, marginLeft: 2, textTransform: "uppercase", letterSpacing: 0.5 },
+  pickerValueRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
+  pickerValueText: { fontSize: 15, fontWeight: "600", color: "#1F2937", flex: 1, marginRight: 6 },
   chapterScroll: { maxHeight: 320 },
   chapterVerseRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
   chapterVerseNum: { fontSize: 11, fontWeight: "bold", color: "#3B82F6", minWidth: 22, marginTop: 2 },

@@ -91,7 +91,7 @@ export async function cancelDailyVerseNotification(): Promise<void> {
   )
 }
 
-export async function scheduleDailyVerseNotification(versionAbbr = "NVI"): Promise<void> {
+export async function scheduleDailyVerseNotification(versionAbbr = "ACF"): Promise<void> {
   const settings = await getNotificationSettings()
   await cancelDailyVerseNotification()
   if (!settings.enabled || settings.times.length === 0) return

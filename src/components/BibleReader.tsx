@@ -56,7 +56,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   initialVersion,
 }) => {
   const availableVersions = getAvailableVersions()
-  const [version, setVersion] = useState(initialVersion ?? availableVersions[0]?.abbreviation ?? "NVI")
+  const [version, setVersion] = useState(initialVersion ?? availableVersions[0]?.abbreviation ?? "ACF")
   const [books, setBooks] = useState<BibleBook[]>([])
   const [selectedBookIndex, setSelectedBookIndex] = useState(0)
   const [selectedChapter, setSelectedChapter] = useState(initialChapter ?? 1)
