@@ -25,6 +25,7 @@ import { BottomTabBar } from "./BottomTabBar"
 import { NotificationSettingsModal } from "./NotificationSettingsModal"
 import { VersionSelectorModal } from "./VersionSelectorModal"
 import { SelectModal } from "./SelectModal"
+import { PhotoCropperModal } from "./PhotoCropperModal"
 import type { UserData, BibleVerse, BibleBook } from "../types"
 import {
   getRandomVerse,
@@ -77,6 +78,8 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const [showVersionSelector, setShowVersionSelector] = useState(false)
   const [photoUri, setPhotoUri] = useState<string | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [cropperImage, setCropperImage] = useState<{ uri: string; width: number; height: number } | null>(null)
 
   // Modo aleatório — histórico para prev/next
   const [verseHistory, setVerseHistory]   = useState<BibleVerse[]>([])
@@ -236,15 +239,26 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     if (!permission.granted) return
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
+      allowsEditing: false,
+      quality: 1,
     })
     if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri
-      setPhotoUri(uri)
-      await AsyncStorage.setItem(PHOTO_KEY, uri)
+      const asset = result.assets[0]
+      setCropperImage({ uri: asset.uri, width: asset.width, height: asset.height })
+      setShowCropper(true)
     }
+  }
+
+  const handleCropConfirm = async (uri: string) => {
+    setPhotoUri(uri)
+    await AsyncStorage.setItem(PHOTO_KEY, uri)
+    setShowCropper(false)
+    setCropperImage(null)
+  }
+
+  const handleCropCancel = () => {
+    setShowCropper(false)
+    setCropperImage(null)
   }
 
   const removePhoto = async () => {
@@ -640,6 +654,16 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
           </View>
         </View>
       </Modal>
+
+      {/* Modal de recorte de foto */}
+      <PhotoCropperModal
+        visible={showCropper}
+        imageUri={cropperImage?.uri ?? null}
+        imageWidth={cropperImage?.width ?? null}
+        imageHeight={cropperImage?.height ?? null}
+        onCancel={handleCropCancel}
+        onConfirm={handleCropConfirm}
+      />
 
       {/* Modal de retomada de leitura */}
       <Modal visible={showReaderModal} animationType="fade" transparent onRequestClose={() => setShowReaderModal(false)}>
