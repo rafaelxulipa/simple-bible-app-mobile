@@ -90,11 +90,10 @@ export function getSpecificVerse(
   }
 }
 
-export function getDailyVerse(versionAbbr = "NVI"): BibleVerse | null {
+export function getDailyVerse(versionAbbr = "NVI", date: Date = new Date()): BibleVerse | null {
   const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
   if (!version || version.books.length === 0) return null
-  const now = new Date()
-  const seed = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate()
+  const seed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate()
   const bookIndex = seed % version.books.length
   const book = version.books[bookIndex]
   const chapterIndex = (seed * 7) % book.chapters.length
