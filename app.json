@@ -33,7 +33,8 @@
         {
           "photosPermission": "O aplicativo precisa acessar suas fotos para você escolher uma foto de perfil."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
