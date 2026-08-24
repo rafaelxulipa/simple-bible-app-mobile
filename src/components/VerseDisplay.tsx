@@ -13,13 +13,17 @@ import {
   Modal,
   FlatList,
   Platform,
+  Image,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { LinearGradient } from "expo-linear-gradient"
 import { MaterialIcons } from "@expo/vector-icons"
 import { Picker } from "@react-native-picker/picker"
+import * as ImagePicker from "expo-image-picker"
 import { CelestialBackground } from "./CelestialBackground"
 import { AppFooter } from "./AppFooter"
+import { BottomTabBar } from "./BottomTabBar"
+import { NotificationSettingsModal } from "./NotificationSettingsModal"
 import type { UserData, BibleVerse, BibleBook } from "../types"
 import {
   getRandomVerse,
@@ -46,6 +50,8 @@ interface FavoriteVerse extends BibleVerse {
 }
 
 const FAVORITES_KEY = "simpleBible:favorites"
+const PHOTO_KEY = "simpleBible:userPhoto"
+const DEFAULT_AVATAR_EMOJI = "👼"
 
 async function loadFavorites(): Promise<FavoriteVerse[]> {
   try {
@@ -66,6 +72,8 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   const [isLoading, setIsLoading]             = useState(false)
   const [showUserInfo, setShowUserInfo]       = useState(false)
   const [showFavorites, setShowFavorites]     = useState(false)
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+  const [photoUri, setPhotoUri] = useState<string | null>(null)
 
   // Modo aleatório — histórico para prev/next
   const [verseHistory, setVerseHistory]   = useState<BibleVerse[]>([])
@@ -97,6 +105,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   useEffect(() => {
     Animated.timing(fadeAnimation, { toValue: 1, duration: 1000, useNativeDriver: true }).start()
     loadFavorites().then(setFavorites)
+    AsyncStorage.getItem(PHOTO_KEY).then(setPhotoUri)
     AsyncStorage.getItem("simpleBible:progress").then((raw) => {
       if (!raw) return
       try {
@@ -215,12 +224,40 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     ])
   }
 
+  const pickPhoto = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!permission.granted) return
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    })
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].uri
+      setPhotoUri(uri)
+      await AsyncStorage.setItem(PHOTO_KEY, uri)
+    }
+  }
+
+  const removePhoto = async () => {
+    setPhotoUri(null)
+    await AsyncStorage.removeItem(PHOTO_KEY)
+  }
+
+  const handleAvatarPress = () => {
+    const buttons: any[] = [{ text: "Escolher da galeria", onPress: pickPhoto }]
+    if (photoUri) buttons.push({ text: "Remover foto", onPress: removePhoto, style: "destructive" })
+    buttons.push({ text: "Cancelar", style: "cancel" })
+    Alert.alert("Foto de perfil", "Como deseja continuar?", buttons)
+  }
+
   const displayVerse = mode === "daily" ? dailyVerse : currentVerse
 
   const renderModeButtons = () => (
     <View style={styles.modeGrid}>
       {(["random", "daily", "navigate", "search"] as Mode[]).map((m) => {
-          const icons: Record<Mode, string> = { random: "shuffle", daily: "today", navigate: "book", search: "search" }
+          const icons: Record<Mode, string> = { random: "shuffle", daily: "today", navigate: "explore", search: "search" }
           const labels: Record<Mode, string> = { random: "Aleatório", daily: "Diário", navigate: "Navegar", search: "Buscar" }
           return (
             <TouchableOpacity
@@ -229,7 +266,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
               onPress={() => setMode(m)}
               activeOpacity={0.7}
             >
-              <MaterialIcons name={icons[m] as any} size={20} color={mode === m ? "#FFFFFF" : "rgba(255,255,255,0.7)"} />
+              <MaterialIcons name={icons[m] as any} size={20} color={mode === m ? "#FFFFFF" : "#1D4ED8"} />
               <Text style={[styles.modeBtnText, mode === m && styles.modeBtnTextActive]}>{labels[m]}</Text>
             </TouchableOpacity>
           )
@@ -239,11 +276,17 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
 
   const renderVerseActions = (verse: BibleVerse | null) => verse ? (
     <View style={styles.verseActions}>
-      <TouchableOpacity style={styles.actionBtn} onPress={() => toggleFavorite(verse)} activeOpacity={0.7}>
-        <MaterialIcons name={isFavorite(verse) ? "favorite" : "favorite-border"} size={22} color={isFavorite(verse) ? "#EF4444" : "#6B7280"} />
+      <TouchableOpacity style={styles.actionItem} onPress={() => toggleFavorite(verse)} activeOpacity={0.7}>
+        <View style={styles.actionBtn}>
+          <MaterialIcons name={isFavorite(verse) ? "favorite" : "favorite-border"} size={20} color={isFavorite(verse) ? "#EF4444" : "#1D4ED8"} />
+        </View>
+        <Text style={styles.actionLabel}>Favorito</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.actionBtn} onPress={() => handleShare(verse)} activeOpacity={0.7}>
-        <MaterialIcons name="share" size={22} color="#6B7280" />
+      <TouchableOpacity style={styles.actionItem} onPress={() => handleShare(verse)} activeOpacity={0.7}>
+        <View style={styles.actionBtn}>
+          <MaterialIcons name="share" size={20} color="#1D4ED8" />
+        </View>
+        <Text style={styles.actionLabel}>Compartilhar</Text>
       </TouchableOpacity>
     </View>
   ) : null
@@ -252,8 +295,10 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     <View style={styles.verseCard}>
       <LinearGradient colors={["rgba(30,64,175,0.06)", "transparent"]} style={StyleSheet.absoluteFillObject} />
       <View style={styles.verseHeader}>
-        <MaterialIcons name="menu-book" size={28} color="#1E40AF" />
-        <Text style={styles.verseTitle}>Versículo do Momento</Text>
+        <View style={[styles.verseIconBadge, { backgroundColor: "#1D4ED8" }]}>
+          <MaterialIcons name="menu-book" size={18} color="#FFFFFF" />
+        </View>
+        <Text style={[styles.verseTitle, { color: "#1D4ED8" }]}>Versículo do Momento</Text>
       </View>
       {isLoading ? (
         <View style={styles.loadingContainer}>
@@ -291,7 +336,9 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     <View style={styles.verseCard}>
       <LinearGradient colors={["rgba(234,179,8,0.08)", "transparent"]} style={StyleSheet.absoluteFillObject} />
       <View style={styles.verseHeader}>
-        <MaterialIcons name="today" size={28} color="#D97706" />
+        <View style={[styles.verseIconBadge, { backgroundColor: "#D97706" }]}>
+          <MaterialIcons name="today" size={18} color="#FFFFFF" />
+        </View>
         <Text style={[styles.verseTitle, { color: "#92400E" }]}>Versículo do Dia</Text>
       </View>
       {dailyVerse ? (
@@ -313,7 +360,9 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     return (
       <View style={styles.verseCard}>
         <View style={styles.verseHeader}>
-          <MaterialIcons name="book" size={28} color="#059669" />
+          <View style={[styles.verseIconBadge, { backgroundColor: "#059669" }]}>
+            <MaterialIcons name="explore" size={18} color="#FFFFFF" />
+          </View>
           <Text style={[styles.verseTitle, { color: "#065F46" }]}>Navegar</Text>
           {onReaderPress && (
             <TouchableOpacity
@@ -362,7 +411,9 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   const renderSearchMode = () => (
     <View style={styles.verseCard}>
       <View style={styles.verseHeader}>
-        <MaterialIcons name="search" size={28} color="#7C3AED" />
+        <View style={[styles.verseIconBadge, { backgroundColor: "#7C3AED" }]}>
+          <MaterialIcons name="search" size={18} color="#FFFFFF" />
+        </View>
         <Text style={[styles.verseTitle, { color: "#4C1D95" }]}>Pesquisar</Text>
       </View>
       <View style={styles.searchRow}>
@@ -410,63 +461,42 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
   return (
     <View style={styles.container}>
       <CelestialBackground />
-      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <Animated.View style={[styles.content, { opacity: fadeAnimation }]}>
           <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
             {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.headerText}>
-                <View style={styles.greetingPill}>
-                  <Text style={styles.greeting}>Olá, {userData.name}! 🙏</Text>
-                </View>
-                <Text style={styles.date}>{getCurrentTime()}</Text>
-              </View>
-              <View style={styles.headerActions}>
-                {onReaderPress && (
-                  <TouchableOpacity style={styles.iconButton} onPress={() => readingProgress ? setShowReaderModal(true) : onReaderPress?.()} activeOpacity={0.7}>
-                    <MaterialIcons name="menu-book" size={22} color="#FFFFFF" />
-                  </TouchableOpacity>
+            <View style={styles.headerCard}>
+              <TouchableOpacity style={styles.avatarCircle} onPress={handleAvatarPress} activeOpacity={0.75}>
+                {photoUri ? (
+                  <Image source={{ uri: photoUri }} style={styles.avatarImage} />
+                ) : (
+                  <Text style={styles.avatarEmoji}>{DEFAULT_AVATAR_EMOJI}</Text>
                 )}
-                <TouchableOpacity style={styles.iconButton} onPress={() => setShowFavorites(true)} activeOpacity={0.7}>
-                  <MaterialIcons name="favorite" size={22} color="#FFFFFF" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconButton} onPress={() => setShowUserInfo(!showUserInfo)} activeOpacity={0.7}>
-                  <MaterialIcons name="settings" size={22} color="#FFFFFF" />
-                </TouchableOpacity>
+                <View style={styles.avatarEditBadge}>
+                  <MaterialIcons name="edit" size={10} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+              <View style={styles.headerText}>
+                <Text style={styles.greeting}>Olá, {userData.name}! 🙏</Text>
+                <Text style={styles.date}>{getCurrentTime()}</Text>
               </View>
             </View>
 
-            {/* User Info Card */}
-            {showUserInfo && (
-              <View style={styles.userInfoCard}>
-                <View style={styles.userInfoRow}>
-                  <MaterialIcons name="person" size={18} color="#FFFFFF" />
-                  <Text style={styles.userInfoText}>{userData.name}</Text>
+            {/* Version Selector */}
+            <View style={styles.versionSection}>
+              <Text style={styles.versionSectionLabel}>Versão da Bíblia</Text>
+              <View style={styles.versionCard}>
+                <View style={styles.versionIconBadge}>
+                  <MaterialIcons name="menu-book" size={18} color="#FFFFFF" />
                 </View>
-                <View style={styles.userInfoRow}>
-                  <MaterialIcons name="church" size={18} color="#FFFFFF" />
-                  <Text style={styles.userInfoText}>{userData.church}</Text>
+                <View style={styles.versionPickerWrap}>
+                  <Picker selectedValue={selectedVersion} onValueChange={setSelectedVersion} style={styles.versionPicker} dropdownIconColor="#1E293B">
+                    {availableVersions.map((v) => (
+                      <Picker.Item key={v.abbreviation} label={`${v.name} (${v.abbreviation})`} value={v.abbreviation} color="#000000" />
+                    ))}
+                  </Picker>
                 </View>
-                <View style={styles.userInfoActions}>
-                  <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.7}>
-                    <Text style={styles.resetButtonText}>Redefinir dados</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowUserInfo(false)} style={{ padding: 8 }}>
-                    <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.7)" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* Version Selector — glassmorphism card, no label row */}
-            <View style={styles.versionCard}>
-              <View style={styles.versionPickerWrap}>
-                <Picker selectedValue={selectedVersion} onValueChange={setSelectedVersion} style={styles.versionPicker} dropdownIconColor="#FFFFFF">
-                  {availableVersions.map((v) => (
-                    <Picker.Item key={v.abbreviation} label={`${v.name} (${v.abbreviation})`} value={v.abbreviation} color="#000000" />
-                  ))}
-                </Picker>
               </View>
             </View>
 
@@ -482,13 +512,28 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
             {/* Footer */}
             <View style={styles.footerText}>
               <View style={styles.footerPill}>
-                <Text style={styles.footerMessage}>Que a palavra de Deus ilumine seu dia! ✨</Text>
-                <Text style={styles.footerChurch}>Igreja: {userData.church}</Text>
+                <View style={styles.footerIconBadge}>
+                  <MaterialIcons name="auto-awesome" size={14} color="#FFFFFF" />
+                </View>
+                <View>
+                  <Text style={styles.footerMessage}>Que a palavra de Deus ilumine seu dia! ✨</Text>
+                  <Text style={styles.footerChurch}>Igreja: {userData.church}</Text>
+                </View>
               </View>
             </View>
 
             <AppFooter onPrivacyPress={onPrivacyPress} />
           </ScrollView>
+
+          <BottomTabBar
+            activeKey={
+              showFavorites ? "favorites" : showNotificationSettings ? "notifications" : showUserInfo ? "settings" : showReaderModal ? "reader" : undefined
+            }
+            onReaderPress={onReaderPress ? () => (readingProgress ? setShowReaderModal(true) : onReaderPress?.()) : undefined}
+            onFavoritesPress={() => setShowFavorites(true)}
+            onNotificationsPress={() => setShowNotificationSettings(true)}
+            onSettingsPress={() => setShowUserInfo(true)}
+          />
         </Animated.View>
       </SafeAreaView>
 
@@ -531,6 +576,37 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
             />
           )}
         </SafeAreaView>
+      </Modal>
+
+      {/* Modal de configuração de notificações */}
+      <NotificationSettingsModal visible={showNotificationSettings} onClose={() => setShowNotificationSettings(false)} />
+
+      {/* Modal de configurações do usuário */}
+      <Modal visible={showUserInfo} animationType="slide" onRequestClose={() => setShowUserInfo(false)} transparent>
+        <View style={styles.userModalBackdrop}>
+          <View style={styles.userModalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>⚙️ Configurações</Text>
+              <TouchableOpacity onPress={() => setShowUserInfo(false)}>
+                <MaterialIcons name="close" size={24} color="#374151" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.userModalBody}>
+              <View style={styles.userInfoRow}>
+                <MaterialIcons name="person" size={18} color="#374151" />
+                <Text style={styles.userModalText}>{userData.name}</Text>
+              </View>
+              <View style={styles.userInfoRow}>
+                <MaterialIcons name="church" size={18} color="#374151" />
+                <Text style={styles.userModalText}>{userData.church}</Text>
+              </View>
+              <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.7}>
+                <MaterialIcons name="delete-outline" size={16} color="#EF4444" />
+                <Text style={styles.resetButtonText}>Redefinir dados</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       {/* Modal de retomada de leitura */}
@@ -632,53 +708,59 @@ const styles = StyleSheet.create({
   scrollView:    { flex: 1, backgroundColor: "transparent" },
   scrollContent: { padding: 16, gap: 14, backgroundColor: "transparent" },
 
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  headerCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 12, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 4 },
+  avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#1E3A8A", justifyContent: "center", alignItems: "center", overflow: "visible" },
+  avatarImage: { width: 44, height: 44, borderRadius: 22 },
+  avatarEmoji: { fontSize: 22 },
+  avatarEditBadge: { position: "absolute", bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: "#1D4ED8", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "#FFFFFF" },
   headerText: { flex: 1 },
-  greetingPill: { alignSelf: "flex-start", backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 4, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
-  greeting: { fontSize: 24, fontWeight: "bold", color: "#FFFFFF" },
-  date: { fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2, backgroundColor: "rgba(0,0,0,0.2)", alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
-  headerActions: { flexDirection: "row", gap: 8 },
-  iconButton: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 25, width: 44, height: 44, justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
+  greeting: { fontSize: 19, fontWeight: "700", color: "#1E293B" },
+  date: { fontSize: 12, color: "#64748B", marginTop: 2 },
 
-  userInfoCard: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", gap: 8 },
-  userInfoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  userInfoText: { color: "#FFFFFF", fontSize: 14 },
-  userInfoActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
-  resetButton: { backgroundColor: "rgba(239,68,68,0.2)", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
-  resetButtonText: { color: "#EF4444", fontSize: 13, fontWeight: "500" },
+  userModalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "center", alignItems: "center", padding: 20 },
+  userModalCard: { width: "100%", maxWidth: 400, backgroundColor: "#FFFFFF", borderRadius: 24, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 },
+  userModalBody: { padding: 20, gap: 14 },
+  userInfoRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F9FAFB", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#E5E7EB" },
+  userModalText: { color: "#1F2937", fontSize: 14, fontWeight: "500" },
+  resetButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "rgba(239,68,68,0.25)", marginTop: 4 },
+  resetButtonText: { color: "#EF4444", fontSize: 14, fontWeight: "600" },
 
-  // Version card — glassmorphism, no label row
-  versionCard: { backgroundColor: "rgba(0,0,0,0.25)", borderRadius: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.2)", overflow: "hidden" },
-  versionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-  versionLabel: { color: "#FFFFFF", fontSize: 13, fontWeight: "500" },
-  versionPickerWrap: { backgroundColor: "transparent", overflow: "hidden" },
-  versionPicker: { color: "#FFFFFF", height: 52 },
+  // Version card — solid card with label above
+  versionSection: { gap: 8 },
+  versionSectionLabel: { color: "#1D4ED8", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginLeft: 6, textShadowColor: "rgba(255,255,255,0.7)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  versionCard: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 18, paddingHorizontal: 10, paddingVertical: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 3 },
+  versionIconBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#1D4ED8", justifyContent: "center", alignItems: "center" },
+  versionPickerWrap: { flex: 1, backgroundColor: "transparent", overflow: "hidden" },
+  versionPicker: { color: "#1E293B", height: 52 },
 
-  // Mode row — horizontal scroll, bigger tabs
+  // Mode row — 2x2 grid, light cards with the active one solid blue
   modeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  modeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, width: "48%", paddingVertical: 12, borderRadius: 16, backgroundColor: "rgba(0,0,0,0.25)", borderWidth: 1, borderColor: "rgba(255,255,255,0.2)" },
-  modeBtnActive: { backgroundColor: "#1D4ED8", borderColor: "#3B82F6" },
-  modeBtnText: { color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "500" },
+  modeBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, width: "48%", minHeight: 52, paddingVertical: 14, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.92)", borderWidth: 1, borderColor: "rgba(255,255,255,0.6)", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 2 },
+  modeBtnActive: { backgroundColor: "#1D4ED8", borderColor: "#1D4ED8", shadowOpacity: 0.28, shadowRadius: 10, elevation: 5 },
+  modeBtnText: { color: "#1E293B", fontSize: 13, fontWeight: "600" },
   modeBtnTextActive: { color: "#FFFFFF", fontWeight: "700" },
 
-  verseCard: { backgroundColor: "rgba(255,255,255,0.97)", borderRadius: 24, padding: 20, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10 },
-  verseHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" },
+  verseCard: { backgroundColor: "rgba(255,255,255,0.97)", borderRadius: 26, padding: 22, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.22, shadowRadius: 20, elevation: 12 },
+  verseHeader: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" },
+  verseIconBadge: { width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
   openReaderBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#059669", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5 },
   openReaderBtnText: { color: "#FFFFFF", fontSize: 11, fontWeight: "600" },
-  verseTitle: { fontSize: 18, fontWeight: "bold", color: "#1E40AF" },
+  verseTitle: { fontSize: 15, fontWeight: "700" },
   loadingContainer: { alignItems: "center", paddingVertical: 32, gap: 10 },
   loadingText: { color: "#6B7280", fontSize: 14 },
-  verseText: { fontSize: 17, fontWeight: "500", color: "#374151", lineHeight: 26, fontStyle: "italic", textAlign: "center", marginBottom: 16 },
-  verseReference: { alignItems: "center", gap: 4, marginBottom: 12 },
+  verseText: { fontSize: 18, fontWeight: "600", color: "#1E293B", lineHeight: 28, textAlign: "center", marginBottom: 18 },
+  verseReference: { alignItems: "center", gap: 4, marginBottom: 14 },
   referenceText: { fontSize: 15, fontWeight: "bold", color: "#3B82F6" },
   versionText: { fontSize: 12, color: "#6B7280" },
-  verseActions: { flexDirection: "row", justifyContent: "center", gap: 16, marginBottom: 16 },
-  actionBtn: { padding: 8, backgroundColor: "#F9FAFB", borderRadius: 20, borderWidth: 1, borderColor: "#E5E7EB" },
+  verseActions: { flexDirection: "row", justifyContent: "center", gap: 28, marginBottom: 20 },
+  actionItem: { alignItems: "center", gap: 6 },
+  actionBtn: { padding: 11, backgroundColor: "#FFFFFF", borderRadius: 24, borderWidth: 1.5, borderColor: "#DBEAFE" },
+  actionLabel: { fontSize: 11, fontWeight: "600", color: "#475569" },
 
   navRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  navBtn: { backgroundColor: "rgba(30,64,175,0.7)", borderRadius: 10, padding: 8 },
-  newVerseButton: { flex: 1, borderRadius: 12, overflow: "hidden", elevation: 4 },
-  buttonGradient: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 12, gap: 8 },
+  navBtn: { backgroundColor: "rgba(30,64,175,0.75)", borderRadius: 14, width: 48, height: 48, justifyContent: "center", alignItems: "center" },
+  newVerseButton: { flex: 1, borderRadius: 14, overflow: "hidden", elevation: 4 },
+  buttonGradient: { flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14, gap: 8 },
   buttonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
   btnDisabled: { opacity: 0.5 },
 
@@ -700,11 +782,12 @@ const styles = StyleSheet.create({
   searchResultRef: { fontSize: 12, fontWeight: "bold", color: "#3B82F6" },
   emptyText: { textAlign: "center", color: "#6B7280", marginTop: 16 },
 
-  // Footer — pill wrapping, no textShadow
+  // Footer — light pill with icon badge
   footerText: { alignItems: "center" },
-  footerPill: { backgroundColor: "rgba(0,0,0,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, alignItems: "center", gap: 2 },
-  footerMessage: { fontSize: 14, fontWeight: "500", color: "rgba(255,255,255,0.95)", textAlign: "center" },
-  footerChurch: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
+  footerPill: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(255,255,255,0.9)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 2 },
+  footerIconBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#1E3A8A", justifyContent: "center", alignItems: "center" },
+  footerMessage: { fontSize: 13, fontWeight: "600", color: "#1E293B" },
+  footerChurch: { fontSize: 11, color: "#64748B", marginTop: 1 },
 
   modalSafe: { flex: 1, backgroundColor: "#FFFFFF" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },

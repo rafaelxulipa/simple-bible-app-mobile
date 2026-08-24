@@ -44,6 +44,8 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>O aplicativo precisa acessar suas fotos para você escolher uma foto de perfil.</string>
     <key>RCTNewArchEnabled</key>
     <true/>
     <key>UILaunchStoryboardName</key>
