@@ -41,6 +41,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 interface VerseDisplayProps {
   userData: UserData
   onReset: () => void
+  onUpdateUserData: (data: UserData) => void
   onPrivacyPress?: () => void
   onReaderPress?: (params?: { book?: string; chapter?: number; verse?: number; version?: string }) => void
 }
@@ -68,12 +69,15 @@ async function saveFavoritesToStorage(favorites: FavoriteVerse[]) {
   await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites))
 }
 
-export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, onPrivacyPress, onReaderPress }) => {
+export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, onUpdateUserData, onPrivacyPress, onReaderPress }) => {
   const isDarkMode = useColorScheme() === "dark"
   const [mode, setMode]                       = useState<Mode>("random")
   const [selectedVersion, setSelectedVersion] = useState("ACF")
   const [isLoading, setIsLoading]             = useState(false)
   const [showUserInfo, setShowUserInfo]       = useState(false)
+  const [editName, setEditName]               = useState(userData.name)
+  const [editChurch, setEditChurch]           = useState(userData.church)
+  const [profileSaved, setProfileSaved]       = useState(false)
   const [showFavorites, setShowFavorites]     = useState(false)
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const [showVersionSelector, setShowVersionSelector] = useState(false)
@@ -232,6 +236,15 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
       { text: "Cancelar", style: "cancel" },
       { text: "Confirmar", onPress: onReset, style: "destructive" },
     ])
+  }
+
+  const isProfileDirty = editName.trim() !== userData.name || editChurch.trim() !== userData.church
+  const canSaveProfile = editName.trim().length > 0 && editChurch.trim().length > 0 && isProfileDirty
+
+  const handleSaveProfile = () => {
+    if (!canSaveProfile) return
+    onUpdateUserData({ name: editName.trim(), church: editChurch.trim() })
+    setProfileSaved(true)
   }
 
   const pickPhoto = async () => {
@@ -548,7 +561,12 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
             onReaderPress={onReaderPress ? () => (readingProgress ? setShowReaderModal(true) : onReaderPress?.()) : undefined}
             onFavoritesPress={() => setShowFavorites(true)}
             onNotificationsPress={() => setShowNotificationSettings(true)}
-            onSettingsPress={() => setShowUserInfo(true)}
+            onSettingsPress={() => {
+              setEditName(userData.name)
+              setEditChurch(userData.church)
+              setProfileSaved(false)
+              setShowUserInfo(true)
+            }}
           />
         </Animated.View>
       </SafeAreaView>
@@ -638,14 +656,43 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
               </TouchableOpacity>
             </View>
             <View style={styles.userModalBody}>
+              <Text style={styles.userFieldLabel}>Seu nome</Text>
               <View style={styles.userInfoRow}>
                 <MaterialIcons name="person" size={18} color="#374151" />
-                <Text style={styles.userModalText}>{userData.name}</Text>
+                <TextInput
+                  style={styles.userModalInput}
+                  value={editName}
+                  onChangeText={(t) => { setEditName(t); setProfileSaved(false) }}
+                  placeholder="Como você se chama?"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                />
               </View>
+              <Text style={styles.userFieldLabel}>Sua igreja</Text>
               <View style={styles.userInfoRow}>
                 <MaterialIcons name="church" size={18} color="#374151" />
-                <Text style={styles.userModalText}>{userData.church}</Text>
+                <TextInput
+                  style={styles.userModalInput}
+                  value={editChurch}
+                  onChangeText={(t) => { setEditChurch(t); setProfileSaved(false) }}
+                  placeholder="Nome da sua igreja"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                />
               </View>
+
+              <TouchableOpacity
+                style={[styles.saveProfileButton, !canSaveProfile && styles.saveProfileButtonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={!canSaveProfile}
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name={profileSaved ? "check" : "save"} size={16} color="#FFFFFF" />
+                <Text style={styles.saveProfileButtonText}>
+                  {profileSaved ? "Alterações salvas" : "Salvar alterações"}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity style={styles.resetButton} onPress={handleReset} activeOpacity={0.7}>
                 <MaterialIcons name="delete-outline" size={16} color="#EF4444" />
                 <Text style={styles.resetButtonText}>Redefinir dados</Text>
@@ -777,7 +824,11 @@ const styles = StyleSheet.create({
   userModalCard: { width: "100%", maxWidth: 400, backgroundColor: "#FFFFFF", borderRadius: 24, overflow: "hidden", shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 },
   userModalBody: { padding: 20, gap: 14 },
   userInfoRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F9FAFB", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#E5E7EB" },
-  userModalText: { color: "#1F2937", fontSize: 14, fontWeight: "500" },
+  userFieldLabel: { color: "#6B7280", fontSize: 12, fontWeight: "600", marginTop: 2 },
+  userModalInput: { flex: 1, color: "#1F2937", fontSize: 14, fontWeight: "500", padding: 0 },
+  saveProfileButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#1D4ED8", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 4 },
+  saveProfileButtonDisabled: { backgroundColor: "#93C5FD" },
+  saveProfileButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "600" },
   resetButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "rgba(239,68,68,0.25)", marginTop: 4 },
   resetButtonText: { color: "#EF4444", fontSize: 14, fontWeight: "600" },
 

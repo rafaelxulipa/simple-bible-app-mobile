@@ -82,6 +82,15 @@ const App: React.FC = () => {
     }
   }
 
+  const handleUpdateUserData = async (data: UserData) => {
+    try {
+      await saveUserData(data)
+      setUserData(data)
+    } catch (error) {
+      console.error("Erro ao atualizar dados do usuário:", error)
+    }
+  }
+
   const handleReset = async () => {
     try {
       await removeUserData()
@@ -116,6 +125,7 @@ const App: React.FC = () => {
         <VerseDisplay
           userData={userData}
           onReset={handleReset}
+          onUpdateUserData={handleUpdateUserData}
           onPrivacyPress={() => setScreen("privacy")}
           onReaderPress={(params) => handleOpenReader(params)}
         />

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react"
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   FlatList,
@@ -68,6 +69,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   const [favorites, setFavorites] = useState<FavoriteVerse[]>([])
   const [fontSizeKey, setFontSizeKey] = useState<FontSizeKey>("medium")
   const [showTOC, setShowTOC] = useState(false)
+  const [tocSearch, setTocSearch] = useState("")
   const [showChapterPicker, setShowChapterPicker] = useState(false)
   const [showVersionPicker, setShowVersionPicker] = useState(false)
   const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
@@ -275,8 +277,19 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
 
   const currentBook = books[selectedBookIndex]
   const chapterCount = currentBook?.chapters.length ?? 0
-  const oldTestament = books.slice(0, 39)
-  const newTestament = books.slice(39)
+
+  const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  const tocQuery = normalize(tocSearch.trim())
+  const matchesQuery = (b: BibleBook) => tocQuery === "" || normalize(b.book).includes(tocQuery)
+
+  const oldTestament = books
+    .slice(0, 39)
+    .map((b, index) => ({ b, index }))
+    .filter(({ b }) => matchesQuery(b))
+  const newTestament = books
+    .slice(39)
+    .map((b, index) => ({ b, index: index + 39 }))
+    .filter(({ b }) => matchesQuery(b))
 
   const closeVerseModal = () => {
     setActiveVerseIndex(null)
@@ -311,7 +324,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   return (
     <View style={styles.container}>
       <CelestialBackground />
-      <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         {/* Header bar */}
         <View style={styles.headerBar}>
           <TouchableOpacity style={styles.iconBtn} onPress={onBack}>
@@ -358,14 +371,30 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           </View>
         )}
 
-        {/* Chapter title */}
+        {/* Chapter title + chapter navigation */}
         <View style={styles.chapterTitle}>
+          <TouchableOpacity
+            style={[styles.chapterNavBtn, !hasPrev && styles.chapterNavBtnDisabled]}
+            onPress={handlePrevChapter}
+            disabled={!hasPrev}
+          >
+            <MaterialIcons name="chevron-left" size={20} color={hasPrev ? "#FFFFFF" : "rgba(255,255,255,0.3)"} />
+          </TouchableOpacity>
+
           <View style={styles.chapterTitlePill}>
             <MaterialIcons name="menu-book" size={14} color="rgba(255,255,255,0.8)" />
             <Text style={styles.chapterTitleText}>
               {currentBook?.book} · Capítulo {selectedChapter}
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.chapterNavBtn, !hasNext && styles.chapterNavBtnDisabled]}
+            onPress={handleNextChapter}
+            disabled={!hasNext}
+          >
+            <MaterialIcons name="chevron-right" size={20} color={hasNext ? "#FFFFFF" : "rgba(255,255,255,0.3)"} />
+          </TouchableOpacity>
         </View>
 
         {/* Verse list */}
@@ -377,27 +406,6 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           contentContainerStyle={styles.verseList}
           showsVerticalScrollIndicator={false}
         />
-
-        {/* Prev / Next chapter navigation */}
-        <View style={styles.navBar}>
-          <TouchableOpacity
-            style={[styles.navBtn, !hasPrev && styles.navBtnDisabled]}
-            onPress={handlePrevChapter}
-            disabled={!hasPrev}
-          >
-            <MaterialIcons name="chevron-left" size={24} color={hasPrev ? "#FFFFFF" : "rgba(255,255,255,0.3)"} />
-            <Text style={[styles.navBtnText, !hasPrev && styles.navBtnTextDisabled]}>Anterior</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.navBtn, !hasNext && styles.navBtnDisabled]}
-            onPress={handleNextChapter}
-            disabled={!hasNext}
-          >
-            <Text style={[styles.navBtnText, !hasNext && styles.navBtnTextDisabled]}>Próximo</Text>
-            <MaterialIcons name="chevron-right" size={24} color={hasNext ? "#FFFFFF" : "rgba(255,255,255,0.3)"} />
-          </TouchableOpacity>
-        </View>
 
         {/* Verse action modal */}
         <Modal
@@ -505,7 +513,13 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         </Modal>
 
         {/* Table of Contents Modal */}
-        <Modal visible={showTOC} animationType="slide" transparent onRequestClose={() => setShowTOC(false)}>
+        <Modal
+          visible={showTOC}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowTOC(false)}
+          onShow={() => setTocSearch("")}
+        >
           <View style={styles.modalBackdrop}>
             <View style={styles.tocModal}>
               <View style={styles.tocHeader}>
@@ -514,48 +528,63 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
                   <MaterialIcons name="close" size={26} color="#374151" />
                 </TouchableOpacity>
               </View>
+              <View style={styles.tocSearchBox}>
+                <MaterialIcons name="search" size={18} color="#9CA3AF" />
+                <TextInput
+                  style={styles.tocSearchInput}
+                  placeholder="Buscar livro..."
+                  placeholderTextColor="#9CA3AF"
+                  value={tocSearch}
+                  onChangeText={setTocSearch}
+                  autoCorrect={false}
+                />
+                {tocSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setTocSearch("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <MaterialIcons name="close" size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
               <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={styles.tocSection}>Antigo Testamento</Text>
-                {oldTestament.map((b, idx) => (
+                {oldTestament.length === 0 && newTestament.length === 0 && (
+                  <Text style={styles.tocEmptyText}>Nenhum livro encontrado.</Text>
+                )}
+                {oldTestament.length > 0 && <Text style={styles.tocSection}>Antigo Testamento</Text>}
+                {oldTestament.map(({ b, index }) => (
                   <TouchableOpacity
                     key={b.abbrev}
-                    style={[styles.tocBookRow, selectedBookIndex === idx && version && styles.tocBookRowActive]}
+                    style={[styles.tocBookRow, selectedBookIndex === index && styles.tocBookRowActive]}
                     onPress={() => {
-                      navigateToBookChapter(idx, 1)
+                      navigateToBookChapter(index, 1)
                       setShowTOC(false)
                     }}
                   >
-                    <Text style={[styles.tocBookText, selectedBookIndex === idx && styles.tocBookTextActive]}>{b.book}</Text>
+                    <Text style={[styles.tocBookText, selectedBookIndex === index && styles.tocBookTextActive]}>{b.book}</Text>
                     <Text style={styles.tocChapterCount}>{b.chapters.length} cap.</Text>
                   </TouchableOpacity>
                 ))}
-                <Text style={styles.tocSection}>Novo Testamento</Text>
-                {newTestament.map((b, idx) => {
-                  const realIdx = idx + 39
-                  return (
-                    <TouchableOpacity
-                      key={b.abbrev}
-                      style={[styles.tocBookRow, selectedBookIndex === realIdx && styles.tocBookRowActive]}
-                      onPress={() => {
-                        navigateToBookChapter(realIdx, 1)
-                        setShowTOC(false)
-                      }}
-                    >
-                      <Text style={[styles.tocBookText, selectedBookIndex === realIdx && styles.tocBookTextActive]}>{b.book}</Text>
-                      <Text style={styles.tocChapterCount}>{b.chapters.length} cap.</Text>
-                    </TouchableOpacity>
-                  )
-                })}
+                {newTestament.length > 0 && <Text style={styles.tocSection}>Novo Testamento</Text>}
+                {newTestament.map(({ b, index }) => (
+                  <TouchableOpacity
+                    key={b.abbrev}
+                    style={[styles.tocBookRow, selectedBookIndex === index && styles.tocBookRowActive]}
+                    onPress={() => {
+                      navigateToBookChapter(index, 1)
+                      setShowTOC(false)
+                    }}
+                  >
+                    <Text style={[styles.tocBookText, selectedBookIndex === index && styles.tocBookTextActive]}>{b.book}</Text>
+                    <Text style={styles.tocChapterCount}>{b.chapters.length} cap.</Text>
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
             </View>
           </View>
         </Modal>
 
         {/* Chapter picker modal */}
-        <Modal visible={showChapterPicker} animationType="slide" transparent onRequestClose={() => setShowChapterPicker(false)}>
+        <Modal visible={showChapterPicker} animationType="fade" transparent onRequestClose={() => setShowChapterPicker(false)}>
           <View style={styles.modalBackdrop}>
             <View style={styles.bottomSheet}>
-              <View style={styles.sheetHandle} />
               <View style={styles.tocHeader}>
                 <Text style={styles.tocTitle}>Capítulo — {currentBook?.book}</Text>
                 <TouchableOpacity onPress={() => setShowChapterPicker(false)}>
@@ -578,10 +607,9 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         </Modal>
 
         {/* Version picker modal */}
-        <Modal visible={showVersionPicker} animationType="slide" transparent onRequestClose={() => setShowVersionPicker(false)}>
+        <Modal visible={showVersionPicker} animationType="fade" transparent onRequestClose={() => setShowVersionPicker(false)}>
           <View style={styles.modalBackdrop}>
             <View style={[styles.bottomSheet, { paddingBottom: 32 }]}>
-              <View style={styles.sheetHandle} />
               <View style={styles.tocHeader}>
                 <Text style={styles.tocTitle}>Versão da Bíblia</Text>
                 <TouchableOpacity onPress={() => setShowVersionPicker(false)}>
@@ -734,18 +762,9 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderRadius: 24,
+    marginHorizontal: 20,
     maxHeight: "75%",
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 4,
   },
   chapterGrid: {
     flexDirection: "row",
@@ -776,6 +795,10 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   chapterTitle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
@@ -783,13 +806,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    alignSelf: "flex-start",
     backgroundColor: "rgba(0,0,0,0.4)",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.15)",
+  },
+  chapterNavBtn: {
+    backgroundColor: "#3B82F6",
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
+  },
+  chapterNavBtnDisabled: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderColor: "rgba(255,255,255,0.2)",
   },
   chapterTitleText: {
     color: "#FFFFFF",
@@ -921,47 +957,41 @@ const styles = StyleSheet.create({
   verseModalConfirmOk: { backgroundColor: "#F59E0B" },
   verseModalConfirmCancelText: { fontSize: 15, fontWeight: "600", color: "#374151" },
   verseModalConfirmOkText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
-  navBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.15)",
-  },
-  navBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  navBtnDisabled: {
-    opacity: 0.4,
-  },
-  navBtnText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  navBtnTextDisabled: {
-    color: "rgba(255,255,255,0.4)",
-  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
+    justifyContent: "center",
   },
   tocModal: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "80%",
-    paddingBottom: 32,
+    borderRadius: 24,
+    marginHorizontal: 20,
+    maxHeight: "75%",
+    paddingBottom: 16,
+  },
+  tocSearchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  tocSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#111827",
+    padding: 0,
+  },
+  tocEmptyText: {
+    textAlign: "center",
+    color: "#9CA3AF",
+    fontSize: 14,
+    paddingVertical: 24,
   },
   tocHeader: {
     flexDirection: "row",
