@@ -34,8 +34,10 @@ import {
   getBooksFromVersion,
   getChapterVerses,
   searchVerses,
+  DEFAULT_VERSION_ABBR,
 } from "../data/bible-verses"
 import { getCurrentTime, formatReference } from "../utils/dateUtils"
+import { getSelectedVersion, saveSelectedVersion } from "../utils/storage"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 interface VerseDisplayProps {
@@ -72,7 +74,7 @@ async function saveFavoritesToStorage(favorites: FavoriteVerse[]) {
 export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, onUpdateUserData, onPrivacyPress, onReaderPress }) => {
   const isDarkMode = useColorScheme() === "dark"
   const [mode, setMode]                       = useState<Mode>("random")
-  const [selectedVersion, setSelectedVersion] = useState("ACF")
+  const [selectedVersion, setSelectedVersion] = useState(DEFAULT_VERSION_ABBR)
   const [isLoading, setIsLoading]             = useState(false)
   const [showUserInfo, setShowUserInfo]       = useState(false)
   const [editName, setEditName]               = useState(userData.name)
@@ -120,6 +122,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     Animated.timing(fadeAnimation, { toValue: 1, duration: 1000, useNativeDriver: true }).start()
     loadFavorites().then(setFavorites)
     AsyncStorage.getItem(PHOTO_KEY).then(setPhotoUri)
+    getSelectedVersion().then((v) => { if (v) setSelectedVersion(v) })
     AsyncStorage.getItem("simpleBible:progress").then((raw) => {
       if (!raw) return
       try {
@@ -245,6 +248,11 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
     if (!canSaveProfile) return
     onUpdateUserData({ name: editName.trim(), church: editChurch.trim() })
     setProfileSaved(true)
+  }
+
+  const handleSelectVersion = (abbreviation: string) => {
+    setSelectedVersion(abbreviation)
+    saveSelectedVersion(abbreviation)
   }
 
   const pickPhoto = async () => {
@@ -620,7 +628,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
         visible={showVersionSelector}
         versions={availableVersions}
         selectedVersion={selectedVersion}
-        onSelect={setSelectedVersion}
+        onSelect={handleSelectVersion}
         onClose={() => setShowVersionSelector(false)}
       />
 
@@ -740,7 +748,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
                     <MaterialIcons name="bookmark" size={18} color="#1D4ED8" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.readerOptionTitle}>Continuar do versículo marcado</Text>
-                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} {readingProgress.chapter}:{readingProgress.verse}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} {readingProgress.chapter}:{readingProgress.verse} · {readingProgress.version}</Text>
                     </View>
                   </TouchableOpacity>
 
@@ -755,7 +763,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
                     <MaterialIcons name="menu-book" size={18} color="#6B7280" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.readerOptionTitle}>Abrir o capítulo do início</Text>
-                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} — Capítulo {readingProgress.chapter}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} — Capítulo {readingProgress.chapter} · {readingProgress.version}</Text>
                     </View>
                   </TouchableOpacity>
                 </>
@@ -772,7 +780,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
                     <MaterialIcons name="play-arrow" size={18} color="#1D4ED8" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.readerOptionTitle}>Continuar do capítulo {readingProgress.chapter}</Text>
-                      <Text style={styles.readerOptionSub}>{readingProgress.bookName}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} · {readingProgress.version}</Text>
                     </View>
                   </TouchableOpacity>
 
@@ -787,7 +795,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
                     <MaterialIcons name="skip-next" size={18} color="#6B7280" />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.readerOptionTitle}>Já li o cap. {readingProgress.chapter}, ir para o {readingProgress.chapter + 1}</Text>
-                      <Text style={styles.readerOptionSub}>{readingProgress.bookName}</Text>
+                      <Text style={styles.readerOptionSub}>{readingProgress.bookName} · {readingProgress.version}</Text>
                     </View>
                   </TouchableOpacity>
                 </>

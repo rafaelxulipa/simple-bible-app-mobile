@@ -16,6 +16,9 @@ import { LinearGradient } from "expo-linear-gradient"
 import { MaterialIcons } from "@expo/vector-icons"
 import { CelestialBackground } from "./CelestialBackground"
 import { AppFooter } from "./AppFooter"
+import { VersionSelectorModal } from "./VersionSelectorModal"
+import { getAvailableVersions, DEFAULT_VERSION_ABBR } from "../data/bible-verses"
+import { saveSelectedVersion } from "../utils/storage"
 import type { UserData } from "../types"
 
 interface WelcomeFormProps {
@@ -26,14 +29,19 @@ interface WelcomeFormProps {
 export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit, onPrivacyPress }) => {
   const [name, setName]     = useState("")
   const [church, setChurch] = useState("")
+  const [version, setVersion] = useState(DEFAULT_VERSION_ABBR)
+  const [showVersionSelector, setShowVersionSelector] = useState(false)
   const colorScheme         = useColorScheme()
   const isDark              = colorScheme === "dark"
+  const availableVersions   = getAvailableVersions()
+  const selectedVersionData = availableVersions.find((v) => v.abbreviation === version)
 
   const handleSubmit = () => {
     if (!name.trim() || !church.trim()) {
       Alert.alert("Campos obrigatórios", "Por favor, preencha todos os campos.")
       return
     }
+    saveSelectedVersion(version)
     onSubmit({ name: name.trim(), church: church.trim() })
   }
 
@@ -117,6 +125,23 @@ export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit, onPrivacyPre
                 />
               </View>
 
+              <View style={styles.inputContainer}>
+                <View style={styles.labelRow}>
+                  <MaterialIcons name="menu-book" size={14} color="#0EA5E9" />
+                  <Text style={styles.label}>Versão da Bíblia</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.input, styles.versionInput, isDark && styles.inputDark]}
+                  onPress={() => setShowVersionSelector(true)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.versionInputText} numberOfLines={1}>
+                    {selectedVersionData?.name} ({version})
+                  </Text>
+                  <MaterialIcons name="expand-more" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
                 style={[styles.button, (!name.trim() || !church.trim()) && styles.buttonDisabled]}
                 onPress={handleSubmit}
@@ -147,6 +172,14 @@ export const WelcomeForm: React.FC<WelcomeFormProps> = ({ onSubmit, onPrivacyPre
           <AppFooter onPrivacyPress={onPrivacyPress} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <VersionSelectorModal
+        visible={showVersionSelector}
+        versions={availableVersions}
+        selectedVersion={version}
+        onSelect={setVersion}
+        onClose={() => setShowVersionSelector(false)}
+      />
     </View>
   )
 }
@@ -262,6 +295,16 @@ const styles = StyleSheet.create({
   },
   inputDark: {
     backgroundColor: "#F9FAFB",
+  },
+  versionInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  versionInputText: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1F2937",
   },
   button: {
     marginTop: 4,

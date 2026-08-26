@@ -3,6 +3,25 @@ import type { BibleVersion, BibleVerse, BibleBook } from "../types"
 import NVI from "./nvi.json"
 import ACF from "./acf.json"
 import AA from "./aa.json"
+import ALM1911 from "./alm1911.json"
+import ARA from "./ara.json"
+import ARC from "./arc.json"
+import AS21 from "./as21.json"
+import BLIVRE from "./blivre.json"
+import JFAA from "./jfaa.json"
+import KJA from "./kja.json"
+import KJF from "./kjf.json"
+import MENS from "./mens.json"
+import NAA from "./naa.json"
+import NBV from "./nbv.json"
+import NTLH from "./ntlh.json"
+import NVT from "./nvt.json"
+import OL from "./ol.json"
+import TB from "./tb.json"
+import VFL from "./vfl.json"
+
+// Versão padrão do aplicativo até o usuário escolher outra
+export const DEFAULT_VERSION_ABBR = "ARC"
 
 // Dados expandidos das escrituras
 export const bibleVersions: BibleVersion[] = [
@@ -21,9 +40,89 @@ export const bibleVersions: BibleVersion[] = [
     abbreviation: "AA",
     books: AA,
   },
+  {
+    name: "Almeida 1911",
+    abbreviation: "ALM1911",
+    books: ALM1911,
+  },
+  {
+    name: "Almeida Revista e Atualizada",
+    abbreviation: "ARA",
+    books: ARA,
+  },
+  {
+    name: "Almeida Revista e Corrigida",
+    abbreviation: "ARC",
+    books: ARC,
+  },
+  {
+    name: "Almeida Século 21",
+    abbreviation: "AS21",
+    books: AS21,
+  },
+  {
+    name: "Bíblia Livre",
+    abbreviation: "BLIVRE",
+    books: BLIVRE,
+  },
+  {
+    name: "João Ferreira de Almeida Atualizada",
+    abbreviation: "JFAA",
+    books: JFAA,
+  },
+  {
+    name: "King James Atualizada",
+    abbreviation: "KJA",
+    books: KJA,
+  },
+  {
+    name: "King James Fiel",
+    abbreviation: "KJF",
+    books: KJF,
+  },
+  {
+    name: "A Mensagem",
+    abbreviation: "MENS",
+    books: MENS,
+  },
+  {
+    name: "Nova Almeida Atualizada",
+    abbreviation: "NAA",
+    books: NAA,
+  },
+  {
+    name: "Nova Bíblia Viva",
+    abbreviation: "NBV",
+    books: NBV,
+  },
+  {
+    name: "Nova Tradução na Linguagem de Hoje",
+    abbreviation: "NTLH",
+    books: NTLH,
+  },
+  {
+    name: "Nova Versão Transformadora",
+    abbreviation: "NVT",
+    books: NVT,
+  },
+  {
+    name: "O Livro",
+    abbreviation: "OL",
+    books: OL,
+  },
+  {
+    name: "Tradução Brasileira",
+    abbreviation: "TB",
+    books: TB,
+  },
+  {
+    name: "Versão Fácil de Ler",
+    abbreviation: "VFL",
+    books: VFL,
+  },
 ]
 
-export function getRandomVerse(versionAbbr = "ACF"): BibleVerse | null {
+export function getRandomVerse(versionAbbr = DEFAULT_VERSION_ABBR): BibleVerse | null {
   const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
   if (!version || version.books.length === 0) return null
 
@@ -90,7 +189,7 @@ export function getSpecificVerse(
   }
 }
 
-export function getDailyVerse(versionAbbr = "ACF", date: Date = new Date()): BibleVerse | null {
+export function getDailyVerse(versionAbbr = DEFAULT_VERSION_ABBR, date: Date = new Date()): BibleVerse | null {
   const version = bibleVersions.find((v) => v.abbreviation === versionAbbr)
   if (!version || version.books.length === 0) return null
   const seed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate()

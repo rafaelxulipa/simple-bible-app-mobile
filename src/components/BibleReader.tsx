@@ -16,7 +16,8 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { MaterialIcons } from "@expo/vector-icons"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { CelestialBackground } from "./CelestialBackground"
-import { getBooksFromVersion, getAvailableVersions } from "../data/bible-verses"
+import { getBooksFromVersion, DEFAULT_VERSION_ABBR } from "../data/bible-verses"
+import { getSelectedVersion } from "../utils/storage"
 import type { BibleBook } from "../types"
 
 const FAVORITES_KEY = "simpleBible:favorites"
@@ -56,8 +57,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   initialVerse,
   initialVersion,
 }) => {
-  const availableVersions = getAvailableVersions()
-  const [version, setVersion] = useState(initialVersion ?? availableVersions[0]?.abbreviation ?? "ACF")
+  const [version, setVersion] = useState(initialVersion ?? DEFAULT_VERSION_ABBR)
   const [books, setBooks] = useState<BibleBook[]>([])
   const [selectedBookIndex, setSelectedBookIndex] = useState(0)
   const [selectedChapter, setSelectedChapter] = useState(initialChapter ?? 1)
@@ -72,7 +72,6 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   const [tocSearch, setTocSearch] = useState("")
   const [showChapterPicker, setShowChapterPicker] = useState(false)
   const [chapterSearch, setChapterSearch] = useState("")
-  const [showVersionPicker, setShowVersionPicker] = useState(false)
   const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
   const [showProgressBanner, setShowProgressBanner] = useState(false)
   const [initialized, setInitialized] = useState(false)
@@ -118,10 +117,15 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
 
   // Recarrega livros ao trocar versão (mantém posição)
   useEffect(() => {
-    if (!initialized) return
     const loaded = getBooksFromVersion(version)
     setBooks(loaded)
   }, [version])
+
+  // Sem versão explícita (ex.: aba "Bíblia" sem progresso salvo): usa a última versão escolhida pelo usuário
+  useEffect(() => {
+    if (initialVersion) return
+    getSelectedVersion().then((v) => { if (v) setVersion(v) })
+  }, [])
 
   // Carrega versículos ao mudar livro/capítulo e faz scroll para versículo marcado
   useEffect(() => {
@@ -191,6 +195,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
 
   const handleRestoreProgress = () => {
     if (!savedProgress || books.length === 0) return
+    if (savedProgress.version !== version) setVersion(savedProgress.version)
     const bookIdx = books.findIndex((b) => b.abbrev === savedProgress.bookAbbrev)
     if (bookIdx >= 0) {
       pendingScrollVerse.current = savedProgress.verse ?? null
@@ -350,9 +355,9 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           </View>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.versionBadge} onPress={() => setShowVersionPicker(true)} activeOpacity={0.75}>
+            <View style={styles.versionBadge}>
               <Text style={styles.versionBadgeText}>{version}</Text>
-            </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.iconBtn} onPress={cycleFontSize}>
               <Text style={styles.fontSizeBtnText}>{fontSizeKey === "small" ? "A" : fontSizeKey === "large" ? "A+" : "Aa"}</Text>
             </TouchableOpacity>
@@ -364,7 +369,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           <View style={styles.progressBanner}>
             <MaterialIcons name="bookmark" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.progressBannerText}>
-              {books.find((b) => b.abbrev === savedProgress.bookAbbrev)?.book} cap. {savedProgress.chapter}
+              {books.find((b) => b.abbrev === savedProgress.bookAbbrev)?.book} cap. {savedProgress.chapter} · {savedProgress.version}
             </Text>
             <TouchableOpacity style={styles.progressBannerBtn} onPress={handleRestoreProgress}>
               <Text style={styles.progressBannerBtnText}>Continuar</Text>
@@ -633,33 +638,6 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Version picker modal */}
-        <Modal visible={showVersionPicker} animationType="fade" transparent onRequestClose={() => setShowVersionPicker(false)}>
-          <View style={styles.modalBackdrop}>
-            <View style={[styles.bottomSheet, { paddingBottom: 32 }]}>
-              <View style={styles.tocHeader}>
-                <Text style={styles.tocTitle}>Versão da Bíblia</Text>
-                <TouchableOpacity onPress={() => setShowVersionPicker(false)}>
-                  <MaterialIcons name="close" size={24} color="#374151" />
-                </TouchableOpacity>
-              </View>
-              {availableVersions.map((v) => (
-                <TouchableOpacity
-                  key={v.abbreviation}
-                  style={[styles.tocBookRow, version === v.abbreviation && styles.tocBookRowActive]}
-                  onPress={() => { setVersion(v.abbreviation); setShowVersionPicker(false) }}
-                >
-                  <View>
-                    <Text style={[styles.tocBookText, version === v.abbreviation && styles.tocBookTextActive]}>{v.name}</Text>
-                    <Text style={styles.tocChapterCount}>{v.abbreviation}</Text>
-                  </View>
-                  {version === v.abbreviation && <MaterialIcons name="check" size={20} color="#3B82F6" />}
-                </TouchableOpacity>
-              ))}
             </View>
           </View>
         </Modal>

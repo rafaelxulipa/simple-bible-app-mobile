@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import type { UserData } from "../types"
 
 const USER_DATA_KEY = "simpleBible:user"
+const VERSION_KEY = "simpleBible:version"
 
 export const saveUserData = async (userData: UserData): Promise<void> => {
   try {
@@ -28,5 +29,22 @@ export const removeUserData = async (): Promise<void> => {
   } catch (error) {
     console.error("Erro ao remover dados do usuário:", error)
     throw error
+  }
+}
+
+export const saveSelectedVersion = async (versionAbbr: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(VERSION_KEY, versionAbbr)
+  } catch (error) {
+    console.error("Erro ao salvar versão selecionada:", error)
+  }
+}
+
+export const getSelectedVersion = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(VERSION_KEY)
+  } catch (error) {
+    console.error("Erro ao carregar versão selecionada:", error)
+    return null
   }
 }
