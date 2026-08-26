@@ -1,5 +1,5 @@
-import React from "react"
-import { Modal, View, Text, TouchableOpacity, StyleSheet, FlatList } from "react-native"
+import React, { useState } from "react"
+import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { MaterialIcons } from "@expo/vector-icons"
 
@@ -16,7 +16,11 @@ interface SelectModalProps<T extends string | number> {
   onSelect: (value: T) => void
   onClose: () => void
   layout?: "list" | "grid"
+  searchable?: boolean
+  searchPlaceholder?: string
 }
+
+const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
 
 export function SelectModal<T extends string | number>({
   visible,
@@ -26,14 +30,27 @@ export function SelectModal<T extends string | number>({
   onSelect,
   onClose,
   layout = "list",
+  searchable = false,
+  searchPlaceholder = "Buscar...",
 }: SelectModalProps<T>) {
+  const [search, setSearch] = useState("")
+
   const handleSelect = (value: T) => {
     onSelect(value)
     onClose()
   }
 
+  const query = normalize(search.trim())
+  const filteredOptions = query === "" ? options : options.filter((o) => normalize(o.label).includes(query))
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+      transparent
+      onShow={() => setSearch("")}
+    >
       <View style={styles.backdrop}>
         <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} />
         <SafeAreaView style={styles.sheet} edges={["bottom"]}>
@@ -44,9 +61,32 @@ export function SelectModal<T extends string | number>({
             </TouchableOpacity>
           </View>
 
+          {searchable && (
+            <View style={styles.searchBox}>
+              <MaterialIcons name="search" size={18} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder={searchPlaceholder}
+                placeholderTextColor="#9CA3AF"
+                value={search}
+                onChangeText={setSearch}
+                autoCorrect={false}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <MaterialIcons name="close" size={16} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {searchable && filteredOptions.length === 0 && (
+            <Text style={styles.emptyText}>Nenhum resultado encontrado.</Text>
+          )}
+
           {layout === "grid" ? (
             <FlatList
-              data={options}
+              data={filteredOptions}
               numColumns={4}
               keyExtractor={(item) => String(item.value)}
               style={styles.listMaxHeight}
@@ -67,7 +107,7 @@ export function SelectModal<T extends string | number>({
             />
           ) : (
             <FlatList
-              data={options}
+              data={filteredOptions}
               keyExtractor={(item) => String(item.value)}
               style={styles.listMaxHeight}
               contentContainerStyle={styles.listContent}
@@ -97,6 +137,9 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 8, maxHeight: "75%" },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, paddingBottom: 12 },
   title: { fontSize: 18, fontWeight: "bold", color: "#1F2937" },
+  searchBox: { flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 16, marginBottom: 12, backgroundColor: "#F3F4F6", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: "#111827", padding: 0 },
+  emptyText: { textAlign: "center", color: "#9CA3AF", fontSize: 14, paddingVertical: 24 },
   listMaxHeight: { flexGrow: 0 },
   listContent: { paddingHorizontal: 16, paddingBottom: 16, gap: 6 },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#F9FAFB", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, borderWidth: 1, borderColor: "#E5E7EB" },

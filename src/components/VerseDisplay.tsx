@@ -632,6 +632,8 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
         selectedValue={selectedBook}
         onSelect={(v) => { setSelectedBook(v); setSelectedChapter(1) }}
         onClose={() => setShowBookSelector(false)}
+        searchable
+        searchPlaceholder="Buscar livro..."
       />
 
       {/* Modal de seleção de capítulo */}
@@ -643,6 +645,8 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({ userData, onReset, o
         selectedValue={selectedChapter}
         onSelect={setSelectedChapter}
         onClose={() => setShowChapterSelector(false)}
+        searchable={chapterCount > 12}
+        searchPlaceholder="Buscar capítulo..."
       />
 
       {/* Modal de configurações do usuário */}

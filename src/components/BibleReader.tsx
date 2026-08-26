@@ -71,6 +71,7 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
   const [showTOC, setShowTOC] = useState(false)
   const [tocSearch, setTocSearch] = useState("")
   const [showChapterPicker, setShowChapterPicker] = useState(false)
+  const [chapterSearch, setChapterSearch] = useState("")
   const [showVersionPicker, setShowVersionPicker] = useState(false)
   const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
   const [showProgressBanner, setShowProgressBanner] = useState(false)
@@ -277,6 +278,9 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
 
   const currentBook = books[selectedBookIndex]
   const chapterCount = currentBook?.chapters.length ?? 0
+  const chapterOptions = Array.from({ length: chapterCount }, (_, i) => i + 1).filter((c) =>
+    chapterSearch.trim() === "" ? true : String(c).includes(chapterSearch.trim()),
+  )
 
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
   const tocQuery = normalize(tocSearch.trim())
@@ -582,7 +586,13 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
         </Modal>
 
         {/* Chapter picker modal */}
-        <Modal visible={showChapterPicker} animationType="fade" transparent onRequestClose={() => setShowChapterPicker(false)}>
+        <Modal
+          visible={showChapterPicker}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowChapterPicker(false)}
+          onShow={() => setChapterSearch("")}
+        >
           <View style={styles.modalBackdrop}>
             <View style={styles.bottomSheet}>
               <View style={styles.tocHeader}>
@@ -591,8 +601,29 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
                   <MaterialIcons name="close" size={24} color="#374151" />
                 </TouchableOpacity>
               </View>
+              {chapterCount > 12 && (
+                <View style={styles.tocSearchBox}>
+                  <MaterialIcons name="search" size={18} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.tocSearchInput}
+                    placeholder="Buscar capítulo..."
+                    placeholderTextColor="#9CA3AF"
+                    value={chapterSearch}
+                    onChangeText={setChapterSearch}
+                    keyboardType="number-pad"
+                  />
+                  {chapterSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setChapterSearch("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <MaterialIcons name="close" size={16} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {chapterOptions.length === 0 && (
+                <Text style={styles.tocEmptyText}>Nenhum capítulo encontrado.</Text>
+              )}
               <ScrollView contentContainerStyle={styles.chapterGrid}>
-                {Array.from({ length: chapterCount }, (_, i) => i + 1).map((c) => (
+                {chapterOptions.map((c) => (
                   <TouchableOpacity
                     key={c}
                     style={[styles.chapterGridItem, selectedChapter === c && styles.chapterGridItemActive]}
