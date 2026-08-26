@@ -414,6 +414,12 @@ export const BibleReader: React.FC<BibleReaderProps> = ({
           renderItem={renderVerse}
           contentContainerStyle={styles.verseList}
           showsVerticalScrollIndicator={false}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false })
+            setTimeout(() => {
+              listRef.current?.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.3 })
+            }, 100)
+          }}
         />
 
         {/* Verse action modal */}
